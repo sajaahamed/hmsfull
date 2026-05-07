@@ -19,15 +19,15 @@ const WardenStudents = () => {
 
     useEffect(() => {
         const fetchStudents = async () => {
-            if (!token || !currentUser?.email) {
-                setError('Unauthorized: Missing token or user info.');
+            if (!token) {
+                setError('Unauthorized: Missing token.');
                 setLoading(false);
                 return;
             }
 
             try {
                 setLoading(true);
-                const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students?wardenEmail=${encodeURIComponent(currentUser.email)}`;
+                const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students`;
                 console.log('Fetching warden students from:', url);
                 
                 const res = await axios.get(url, {
@@ -53,7 +53,7 @@ const WardenStudents = () => {
         };
 
         fetchStudents();
-    }, [token, currentUser.email]);
+    }, [token]);
 
     const filteredStudents = students.filter(({ student }) => {
         const term = searchTerm.toLowerCase();
@@ -74,7 +74,7 @@ const WardenStudents = () => {
         if (currentPage > totalPages) {
             setCurrentPage(1);
         }
-    }, [searchTerm, totalPages]);
+    }, [currentPage, searchTerm, totalPages]);
 
     // Calculate statistics
     const stats = useMemo(() => {
@@ -128,7 +128,7 @@ const WardenStudents = () => {
 
                     <div className="relative z-10">
                         <div className="text-sm font-medium uppercase tracking-wide text-orange-100">
-                            Pending Assignment
+                            Pending Assign
                         </div>
                         <div className="mt-2 text-3xl font-bold">{stats.unassigned}</div>
                     </div>

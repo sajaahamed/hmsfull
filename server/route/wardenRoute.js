@@ -10,6 +10,8 @@ router.get('/std-extra-needs', authMiddleware, checkPermission('std-extra-needs'
 
 router.post('/approve-need/:id', authMiddleware, checkPermission('approve-needs'), WardenController.approveneeds)
 
+router.post('/reject-need/:id', authMiddleware, checkPermission('approve-needs'), WardenController.rejectneeds)
+
 router.get('/all-rooms', authMiddleware, checkPermission('rooms-for-students'), WardenController.getallwardenrooms)
 
 router.post('/assign-room-special', authMiddleware, checkPermission('assign-room-special'), WardenController.assignstdtorooms_via_sp)
@@ -38,5 +40,6 @@ router.post('/delete-warden/:id', authMiddleware, checkPermission('manage-warden
 // Payments - warden collection
 router.post('/collect-payment', authMiddleware, WardenController.collect_payment)
 router.get('/payments', authMiddleware, WardenController.getPayments)
+router.get('/payments/export', authMiddleware, WardenController.exportPayments)
 
 module.exports = router;

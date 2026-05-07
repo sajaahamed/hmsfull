@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+.no-scrollbar {
+	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+	display: none; /* Chrome, Safari and Opera */
+}
+
+/* Modern, subtle scrollbars (transparent track + translucent thumb) */
+.scrollbar-modern {
+	scrollbar-width: thin; /* Firefox */
+	scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+.scrollbar-modern::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb {
+	background-color: rgba(255, 255, 255, 0.12);
+	border-radius: 9999px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+.scrollbar-modern:hover::-webkit-scrollbar-thumb {
+	background-color: rgba(255, 255, 255, 0.26);
+}

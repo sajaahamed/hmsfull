@@ -3,8 +3,37 @@ const XLSX = require('xlsx');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const Student = require('../model/Student');
+const Allocation = require('../model/Allocation');
+const Hostel = require('../model/Hostel');
 const SpecialNeeds = require('../model/SpecialNeeds');
 const EmergencyContact = require('../model/EmergencyContact');
+const User = require('../model/User');
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeEmail(value) {
+    let email = typeof value === 'string' ? value : String(value ?? '');
+    email = email.trim();
+    for (let i = 0; i < 2; i++) {
+        try {
+            const decoded = decodeURIComponent(email);
+            if (decoded === email) break;
+            email = decoded;
+        } catch {
+            break;
+        }
+    }
+    return email;
+}
+
+function normalizeGender(value) {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (raw === 'm' || raw === 'male') return 'Male';
+    if (raw === 'f' || raw === 'female') return 'Female';
+    return 'Other';
+}
 
 // Geocoding function using OpenCage API
 async function geocodeWithOpenCage(address) {
@@ -59,7 +88,7 @@ async function getRoadDistanceOSRM(start, end) {
 async function getDistanceWithGoogleDirections(origin, dest, apiKey) {
     try {
         // Request alternative routes and pick the shortest by distance to better match Google Maps UI
-        const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&key=${apiKey}&mode=driving&alternatives=true&units=metric`;
+        const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&key=${apiKey}&mode=driving&alternatives=true&departure_time=now&t&units=metric`;
         const resp = await axios.get(url);
         if (!resp.data || resp.data.status !== 'OK') {
             const errMsg = resp.data && resp.data.error_message ? resp.data.error_message : (resp.data && resp.data.status) || 'UNKNOWN';
@@ -299,7 +328,7 @@ const StudentController = {
                     initials: get('Initials'),
                     fullName: get('Full_Name') || get('fullname'),
                     alDistrict: get('alDistrict') || get('aldistrict'),
-                    sex: get('Sex'),
+                    sex: normalizeGender(get('Sex') ?? get('Gender')),
                     zScore: isNaN(parseFloat(get('Z_Score'))) ? 0 : parseFloat(get('Z_Score')),
                     medium: get('Medium'),
                     nic: get('NIC'),
@@ -611,7 +640,7 @@ const StudentController = {
                 initials,
                 fullName,
                 alDistrict,
-                sex,
+                sex: normalizeGender(sex),
                 zScore,
                 medium,
                 nic,
@@ -639,12 +668,149 @@ const StudentController = {
 
     studentGetall: async (req, res) => {
         try {
-            const getAllStudents = await Student.find()
+            const { hostelId } = req.query;
 
-            return res.json({ Result: getAllStudents })
+            // If hostelId is provided, return only students currently (active) allocated to that hostel.
+            // This makes hostel-wise filtering reliable even when client-side enrichment is missing.
+            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+            if (hostelId) {
+                const hostelIdStr = String(hostelId);
+                if (!objectIdPattern.test(hostelIdStr)) {
+                    return res.status(400).json({ Error: 'Invalid hostelId query parameter' });
+                }
+
+                const hostel = await Hostel.findById(hostelIdStr).select('name').lean();
+                const hostelName = hostel?.name || null;
+
+                const allocations = await Allocation.find({ hostelID: hostelIdStr, active: true })
+                    .select('studentId regNo')
+                    .sort({ inDate: -1, _id: -1 })
+                    .lean();
+
+                if (!allocations.length) {
+                    return res.json({ Result: [] });
+                }
+
+                const studentIdSet = new Set();
+                const enrolmentNoSet = new Set();
+
+                allocations.forEach(a => {
+                    if (a.studentId) {
+                        studentIdSet.add(a.studentId.toString());
+                    }
+                    if (a.regNo) {
+                        const regNo = String(a.regNo);
+                        if (objectIdPattern.test(regNo)) {
+                            studentIdSet.add(regNo);
+                        } else {
+                            enrolmentNoSet.add(regNo);
+                        }
+                    }
+                });
+
+                const studentIds = Array.from(studentIdSet);
+                const enrolmentNos = Array.from(enrolmentNoSet);
+
+                if (!studentIds.length && !enrolmentNos.length) {
+                    return res.json({ Result: [] });
+                }
+
+                const students = await Student.find({
+                    $or: [
+                        ...(studentIds.length ? [{ _id: { $in: studentIds } }] : []),
+                        ...(enrolmentNos.length ? [{ enrolmentNo: { $in: enrolmentNos } }] : [])
+                    ]
+                }).lean();
+
+                const enriched = (students || []).map(s => ({
+                    ...s,
+                    hostelId: hostelIdStr,
+                    hostelName
+                }));
+
+                return res.json({ Result: enriched });
+            }
+
+            const students = await Student.find().lean();
+
+            if (!students.length) {
+                return res.json({ Result: [] });
+            }
+
+            const studentIds = students.map(s => s._id.toString());
+            const studentIdSet = new Set(studentIds);
+
+            const enrolmentNos = students.map(s => s.enrolmentNo).filter(Boolean);
+
+            const allocationQueryOr = [
+                { studentId: { $in: studentIds } },
+                { regNo: { $in: studentIds } },
+            ];
+            if (enrolmentNos.length) {
+                allocationQueryOr.push({ regNo: { $in: enrolmentNos } });
+            }
+
+            const allocations = await Allocation.find({
+                active: true,
+                $or: allocationQueryOr
+            })
+                .sort({ inDate: -1, _id: -1 })
+                .populate('hostelID', 'name')
+                .lean();
+
+            const enrolToId = new Map();
+            students.forEach(s => {
+                if (s.enrolmentNo) {
+                    enrolToId.set(s.enrolmentNo, s._id.toString());
+                }
+            });
+
+            const hostelByStudentId = new Map();
+
+            // allocations are sorted latest-first; first match wins per student
+            for (const allocation of allocations) {
+                let studentKey = null;
+
+                if (allocation.studentId) {
+                    studentKey = allocation.studentId.toString();
+                }
+
+                if (!studentKey && allocation.regNo) {
+                    const regNo = String(allocation.regNo);
+                    if (objectIdPattern.test(regNo) && studentIdSet.has(regNo)) {
+                        studentKey = regNo;
+                    } else if (enrolToId.has(regNo)) {
+                        studentKey = enrolToId.get(regNo);
+                    }
+                }
+
+                if (!studentKey || hostelByStudentId.has(studentKey)) continue;
+
+                const hostelId = allocation.hostelID && (allocation.hostelID._id || allocation.hostelID);
+                const hostelName = allocation.hostelID && allocation.hostelID.name ? allocation.hostelID.name : null;
+                if (!hostelId && !hostelName) continue;
+
+                hostelByStudentId.set(studentKey, {
+                    hostelId: hostelId ? hostelId.toString() : null,
+                    hostelName
+                });
+            }
+
+            const enrichedStudents = students.map(s => {
+                const sid = s._id.toString();
+                const hostel = hostelByStudentId.get(sid);
+                return {
+                    ...s,
+                    hostelId: hostel ? hostel.hostelId : null,
+                    hostelName: hostel ? hostel.hostelName : null,
+                };
+            });
+
+            return res.json({ Result: enrichedStudents });
         }
         catch (err) {
             console.log(err)
+            return res.status(500).json({ Error: 'Server error', details: err.message });
         }
     },
 
@@ -710,6 +876,7 @@ const StudentController = {
                     initials,
                     fullName,
                     alDistrict,
+                    sex: normalizeGender(sex),
                     zScore,
                     medium,
                     address1,
@@ -744,10 +911,29 @@ const StudentController = {
             const { regNo, needs } = req.body;
 
             if (!regNo || !needs) {
-                return res.json({ Error: 'regNo and needs are required.' });
+                return res.status(400).json({ Status: 'Fail', Error: 'regNo and needs are required.' });
             }
 
-            const getstdId = await Student.findOne({ email: regNo })
+            const normalizedIdentifier = normalizeEmail(regNo);
+            if (!normalizedIdentifier) {
+                return res.status(400).json({ Status: 'Fail', Error: 'regNo (enrolmentNo) is required.' });
+            }
+
+            // regNo is treated as enrolmentNo (preferred). Fall back to email for backwards compatibility.
+            let getstdId = await Student.findOne({ enrolmentNo: normalizedIdentifier });
+            if (!getstdId) {
+                getstdId = await Student.findOne({ enrolmentNo: new RegExp(`^${escapeRegExp(normalizedIdentifier)}$`, 'i') });
+            }
+            if (!getstdId) {
+                getstdId = await Student.findOne({ email: normalizedIdentifier });
+            }
+            if (!getstdId) {
+                getstdId = await Student.findOne({ email: new RegExp(`^${escapeRegExp(normalizedIdentifier)}$`, 'i') });
+            }
+
+            if (!getstdId) {
+                return res.status(404).json({ Status: 'Fail', Error: 'Student not found' });
+            }
 
             const newSpecialNeeds = new SpecialNeeds({
                 regNo: getstdId._id,
@@ -759,7 +945,7 @@ const StudentController = {
             return res.json({ Status: 'Success', Message: 'Special needs submitted successfully!' });
         } catch (err) {
             console.error('Error saving special needs:', err);
-            return res.json({ Error: 'Internal server error' });
+            return res.status(500).json({ Status: 'Fail', Error: 'Internal server error' });
         }
     },
 
@@ -847,22 +1033,49 @@ const StudentController = {
         try {
             const { email } = req.params;
 
-            if (!email) {
-                return res.json({ Status: 'Fail', Error: 'Email parameter is required' });
+            const emailsToTry = new Set();
+            const normalizedParamEmail = normalizeEmail(email);
+            if (normalizedParamEmail) {
+                emailsToTry.add(normalizedParamEmail);
             }
 
-            const stdID = await Student.findOne({ email: email })
+            if (req.user?.id) {
+                const tokenUser = await User.findById(req.user.id).select('email');
+                const normalizedTokenEmail = normalizeEmail(tokenUser?.email);
+                if (normalizedTokenEmail) {
+                    emailsToTry.add(normalizedTokenEmail);
+                }
+            }
+
+            if (emailsToTry.size === 0) {
+                return res.status(400).json({ Status: 'Fail', Error: 'Student identifier is required' });
+            }
+
+            let stdID = null;
+            for (const candidateIdentifier of emailsToTry) {
+                // Treat route param as enrolmentNo first. Fall back to email.
+                stdID = await Student.findOne({ enrolmentNo: candidateIdentifier });
+                if (!stdID) {
+                    stdID = await Student.findOne({ enrolmentNo: new RegExp(`^${escapeRegExp(candidateIdentifier)}$`, 'i') });
+                }
+                if (!stdID) {
+                    stdID = await Student.findOne({ email: candidateIdentifier });
+                }
+                if (!stdID) {
+                    stdID = await Student.findOne({ email: new RegExp(`^${escapeRegExp(candidateIdentifier)}$`, 'i') });
+                }
+                if (stdID) break;
+            }
+
+            if (!stdID) {
+                return res.status(404).json({ Status: 'Fail', Error: 'Student not found' });
+            }
 
             const specialNeeds = await SpecialNeeds.find({ regNo: stdID._id });
-
-            if (!specialNeeds) {
-                return res.json({ Status: 'Fail', Error: 'No special needs found for this user' });
-            }
-
             return res.json({ Status: 'Success', Data: specialNeeds });
         } catch (err) {
             console.error('Error fetching special needs by email:', err);
-            return res.json({ Status: 'Fail', Error: 'Internal server error' });
+            return res.status(500).json({ Status: 'Fail', Error: 'Internal server error' });
         }
     }
 

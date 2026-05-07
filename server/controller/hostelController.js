@@ -9,6 +9,32 @@ const { jwtDecode } = require('jwt-decode');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 
+const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+
+function normalizeRoom(room) {
+    if (!room) return null;
+
+    return {
+        _id: room._id,
+        roomID: room.roomID,
+        roomNo: room.roomNo || room.roomID,
+        currentOccupants: room.currentOccupants,
+        capacity: room.capasity,
+        status: room.status,
+    };
+}
+
+function normalizeHostel(hostel) {
+    if (!hostel) return null;
+
+    return {
+        _id: hostel._id,
+        hostelID: hostel.hostelID,
+        name: hostel.name,
+        gender: hostel.gender,
+    };
+}
+
 
 const HostelController = {
     GetallWarden: async (req, res) => {
@@ -314,72 +340,121 @@ const HostelController = {
 
     getWardenStudents: async (req, res) => {
         try {
-            // Find all active hostel allocations (students assigned to hostels)
-            const allocations = await Allocation.find({
-                active: true,
-            }).populate('roomId').populate('hostelID');
-
-            console.log('Found allocations:', allocations.length);
-
-            // Get all student IDs from allocations
-            const studentIds = allocations.map(a => a.regNo).filter(Boolean);
-
-            // Find all students by their ObjectIds
-            const students = await Student.find({
-                _id: { $in: studentIds }
-            });
-
-            console.log('Found students:', students.length);
-
-            // Create a map of students by ID for quick lookup
-            const studentMap = {};
-            students.forEach(s => {
-                studentMap[s._id.toString()] = s;
-            });
-
-            // Group allocations by student
-            const result = [];
-            const processedStudents = new Set();
-
-            for (const allocation of allocations) {
-                const studentId = allocation.regNo;
-                if (!studentId || processedStudents.has(studentId)) continue;
-
-                const student = studentMap[studentId];
-                if (!student) continue;
-
-                processedStudents.add(studentId);
-
-                // Get all allocations for this student
-                const studentAllocations = allocations
-                    .filter(a => a.regNo === studentId)
-                    .map(a => ({
-                        allocationId: a._id,
-                        roomId: a.roomId ? {
-                            _id: a.roomId._id,
-                            roomID: a.roomId.roomID,
-                            roomNo: a.roomId.roomID,
-                            currentOccupants: a.roomId.currentOccupants,
-                            capacity: a.roomId.capasity,
-                            status: a.roomId.status
-                        } : null,
-                        hostelID: a.hostelID?._id || a.hostelID,
-                        hostelName: a.hostelID?.name || null,
-                        academicYear: a.academicYear,
-                        inDate: a.inDate,
-                        outDate: a.outDate,
-                        note: a.note,
-                        active: a.active,
-                    }));
-
-                result.push({
-                    student,
-                    allocations: studentAllocations
-                });
+            const userId = req.user?.id;
+            if (!userId) {
+                return res.status(401).json({ message: 'Unauthorized' });
             }
 
-            console.log('Final result count:', result.length);
-            res.json({ Result: result });
+            const wardenRecord = await Warden.findOne({ userId }).populate('hostelId', 'hostelID name gender');
+            if (!wardenRecord || !wardenRecord.hostelId) {
+                return res.status(403).json({ message: 'Warden hostel not found' });
+            }
+
+            const allocations = await Allocation.find({
+                hostelID: wardenRecord.hostelId._id,
+                active: true,
+            })
+                .populate('roomId')
+                .populate('hostelID', 'hostelID name gender');
+
+            if (!allocations.length) {
+                return res.json({ Result: [], hostel: normalizeHostel(wardenRecord.hostelId) });
+            }
+
+            const objectIds = new Set();
+            const enrolmentNos = new Set();
+
+            allocations.forEach(allocation => {
+                if (allocation.studentId) {
+                    objectIds.add(allocation.studentId.toString());
+                }
+
+                if (allocation.regNo) {
+                    const regNo = String(allocation.regNo);
+                    if (objectIdPattern.test(regNo)) {
+                        objectIds.add(regNo);
+                    } else {
+                        enrolmentNos.add(regNo);
+                    }
+                }
+            });
+
+            const students = await Student.find({
+                $or: [
+                    { _id: { $in: Array.from(objectIds) } },
+                    { enrolmentNo: { $in: Array.from(enrolmentNos) } }
+                ]
+            });
+
+            const studentsById = new Map();
+            const studentsByEnrolment = new Map();
+
+            students.forEach(student => {
+                studentsById.set(student._id.toString(), student);
+                if (student.enrolmentNo) {
+                    studentsByEnrolment.set(student.enrolmentNo, student);
+                }
+            });
+
+            const groupedStudents = new Map();
+
+            allocations.forEach(allocation => {
+                let student = null;
+                let studentKey = null;
+
+                if (allocation.studentId) {
+                    const studentId = allocation.studentId.toString();
+                    student = studentsById.get(studentId) || null;
+                    studentKey = studentId;
+                }
+
+                if (!student && allocation.regNo) {
+                    const regNo = String(allocation.regNo);
+                    if (objectIdPattern.test(regNo)) {
+                        student = studentsById.get(regNo) || null;
+                        studentKey = regNo;
+                    }
+
+                    if (!student) {
+                        student = studentsByEnrolment.get(regNo) || null;
+                        studentKey = student ? student._id.toString() : studentKey;
+                    }
+                }
+
+                if (!student || !studentKey) {
+                    return;
+                }
+
+                if (!groupedStudents.has(studentKey)) {
+                    groupedStudents.set(studentKey, {
+                        student,
+                        allocations: []
+                    });
+                }
+
+                groupedStudents.get(studentKey).allocations.push({
+                    allocationId: allocation._id,
+                    roomId: normalizeRoom(allocation.roomId),
+                    hostelID: allocation.hostelID?._id || allocation.hostelID || null,
+                    hostelName: allocation.hostelID?.name || null,
+                    academicYear: allocation.academicYear,
+                    inDate: allocation.inDate,
+                    outDate: allocation.outDate,
+                    note: allocation.note,
+                    active: allocation.active,
+                });
+            });
+
+            const result = Array.from(groupedStudents.values()).sort((a, b) => {
+                const aName = (a.student?.fullName || a.student?.name || a.student?.enrolmentNo || '').toString();
+                const bName = (b.student?.fullName || b.student?.name || b.student?.enrolmentNo || '').toString();
+                return aName.localeCompare(bName, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            return res.json({
+                Result: result,
+                hostel: normalizeHostel(wardenRecord.hostelId)
+            });
 
         } catch (err) {
             console.error('Error in getWardenStudents:', err);

@@ -22,8 +22,10 @@ const ExtraNeeds = () => {
             }
 
             try {
+                const identifier = localStorage.getItem('studentRegNo') || userInfo.email;
+
                 const response = await axios.get(
-                    `${import.meta.env.VITE_APP_API}/student/get-student-needs/${userInfo.email}`,
+                    `${import.meta.env.VITE_APP_API}/student/get-student-needs/${encodeURIComponent(identifier)}`,
                     {
                         headers: { Authorization: `Bearer ${token}` },
                     }
@@ -36,7 +38,14 @@ const ExtraNeeds = () => {
                 }
             } catch (err) {
                 console.error('Failed to fetch special needs:', err);
-                setError('Failed to load special needs');
+
+                const data = err?.response?.data;
+                const serverMsg = typeof data === 'string'
+                    ? data
+                    : (data?.Error || data?.message || data?.Message || data?.error);
+
+                const msg = serverMsg || err?.message || 'Failed to load special needs';
+                setError(msg);
             } finally {
                 setLoading(false);
             }
@@ -70,18 +79,28 @@ const ExtraNeeds = () => {
                     <div className="space-y-6 mb-6">
                         <h2 className="font-semibold text-[#6b0f14] mb-2">Your Submitted Special Needs:</h2>
                         {specialNeedsList.map((need) => (
+                            (() => {
+                                const decision = need?.decision || (need?.isAccpeted ? 'approved' : 'pending')
+                                const statusLabel = decision === 'approved'
+                                    ? 'Approved'
+                                    : decision === 'rejected'
+                                        ? 'Rejected'
+                                        : 'Pending'
+                                return (
                             <div
                                 key={need._id}
                                 className="bg-[#fefaf0] p-4 rounded border border-[#f5e6c8]"
                             >
                                 <p>{need.needs}</p>
                                 <p className="mt-2 text-sm text-gray-600">
-                                    Status: {need.isAccpeted ? 'Approved' : 'Pending / Not Approved'}
+                                    Status: {statusLabel}
                                 </p>
                                 <p className="mt-1 text-xs text-gray-400">
                                     Submitted on: {new Date(need.createdAt).toLocaleDateString()}
                                 </p>
                             </div>
+                                )
+                            })()
                         ))}
                     </div>
                 ) : (

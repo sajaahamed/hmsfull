@@ -1,6 +1,7 @@
 // checkPermissionMiddleware.js
 const User = require('../model/User');
 const Role = require('../model/Role');
+const Warden = require('../model/Warden');
 
 const checkPermission = (requiredPermission) => {
     return async (req, res, next) => {
@@ -25,6 +26,31 @@ const checkPermission = (requiredPermission) => {
             if (requiredPermission === 'assign-room-special') {
                 const roleNames = user.roles.map(r => r.name);
                 if (roleNames.includes('warden')) {
+                    return next();
+                }
+            }
+
+            // Extra needs: allow wardens to view and decide extra-needs requests even if the
+            // permission strings are missing from Role documents.
+            if (requiredPermission === 'std-extra-needs' || requiredPermission === 'approve-needs') {
+                const roleNames = user.roles.map(r => r.name);
+                if (roleNames.includes('warden')) {
+                    return next();
+                }
+
+                // Some deployments have warden users with an incorrect Role assignment.
+                // If the user is actually linked to a Warden record, allow these warden-only actions.
+                const wardenRecord = await Warden.findOne({ userId }).select('_id').lean();
+                if (wardenRecord) {
+                    return next();
+                }
+            }
+
+            // Payments: allow privileged roles to read payments even if the permission string
+            // hasn't been added to the Role documents yet.
+            if (requiredPermission === 'view-payments') {
+                const roleNames = user.roles.map(r => r.name);
+                if (roleNames.includes('admin') || roleNames.includes('director')) {
                     return next();
                 }
             }

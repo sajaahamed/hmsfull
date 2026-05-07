@@ -40,6 +40,7 @@ import WardenRoomAssignNeed from './pages/WardenDash/WardenRoomAssignNeed'
 import StdAssignNormal from './pages/WardenDash/StdAssignNormal'
 import WardenPayments from './pages/WardenDash/WardenPayments'
 import StdExtraNeeds from './pages/StdExtraNeeds/StdExtraNeeds'
+import AdminExtraNeeds from './pages/StdExtraNeeds/AdminExtraNeeds'
 import AssignStdRoomSp from './pages/WardenDash/AssignStdRoomSp'
 import AssignStundetToRoomSp from './pages/WardenDash/AssignStundetToRoomSp'
 import AlreadyAssigned from './pages/WardenDash/AlreadyAssigned'
@@ -99,6 +100,7 @@ function App() {
                         <Route path='CreateExtraNeeds' element={<PrivateRoute element={<CreateExtraNeeds /> } /> } />
                         <Route path='EmergencyContact' element={<PrivateRoute element={<EmergencyContact /> } /> } />
                         <Route path='StdExtraNeeds' element={<PrivateRoute element={<StdExtraNeeds /> } /> } />
+                        <Route path='AdminExtraNeeds' element={<PrivateRoute element={<AdminExtraNeeds /> } /> } />
 
 
                     </Route>

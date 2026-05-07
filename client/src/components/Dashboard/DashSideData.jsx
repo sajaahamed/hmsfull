@@ -85,6 +85,12 @@ const dashsidedata = [
         icon: FaHouseUser
     },
     {
+        id: 16,
+        name: 'Student Extra Needs',
+        link: '/Dashboard/AdminExtraNeeds',
+        icon: FaHouseUser
+    },
+    {
         id: 15,
         name: 'Payments',
         link: '/Dashboard/WardenPayments',

@@ -17,6 +17,16 @@ const CreateExtraNeeds = () => {
 
     useEffect(() => {
         const userInfo = getUserInfoFromToken()
+        const savedRegNo = localStorage.getItem('studentRegNo')
+
+        if (savedRegNo) {
+            setFormData((prev) => ({
+                ...prev,
+                regNo: savedRegNo,
+            }))
+            return
+        }
+
         if (userInfo && userInfo.email) {
             setFormData((prev) => ({
                 ...prev,
@@ -35,21 +45,31 @@ const CreateExtraNeeds = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        console.log(formData)
+
         try {
             const res = await axios.post(import.meta.env.VITE_APP_API + '/student/student-create-needs', formData, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
-            if(res.data.Status === "Success"){
+
+            if (res.data?.Status === "Success") {
+                // Remember the identifier used so the list page can fetch the right record
+                localStorage.setItem('studentRegNo', formData.regNo)
+
                 alert(res.data.Message)
                 navigate('/Dashboard/ExtraNeeds', { replace: true })
-            }
-            else{
-                alert(res.data.Error)
+            } else {
+                alert(res.data?.Error || res.data?.message || 'Failed to submit special needs')
             }
         } catch (error) {
             console.error('Error submitting special needs:', error)
-            alert('Failed to submit special needs')
+
+            const data = error?.response?.data
+            const serverMsg = typeof data === 'string'
+                ? data
+                : (data?.Error || data?.message || data?.Message || data?.error)
+
+            const msg = serverMsg || error?.message || 'Failed to submit special needs'
+            alert(msg)
         }
     }
 

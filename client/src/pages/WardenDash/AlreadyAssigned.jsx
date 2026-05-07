@@ -10,9 +10,11 @@ const AlreadyAssigned = () => {
     const { roles } = getUserInfoFromToken() || {};
     const token = localStorage.getItem('login');
 
-    const roleNames = Array.isArray(roles)
-        ? roles.map(r => (typeof r === 'string' ? r : r.name))
-        : [typeof roles === 'string' ? roles : roles?.name];
+    const roleNames = useMemo(() => {
+        return Array.isArray(roles)
+            ? roles.map(r => (typeof r === 'string' ? r : r.name))
+            : [typeof roles === 'string' ? roles : roles?.name];
+    }, [roles]);
 
     useEffect(() => {
         if (!(roleNames.includes('admin') || roleNames.includes('director') || roleNames.includes('warden'))) {
@@ -40,7 +42,7 @@ const AlreadyAssigned = () => {
             // Prefer warden-specific endpoint (returns { student, allocations }) when available
             if (currentUser.email) {
                 try {
-                    const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students?wardenEmail=${encodeURIComponent(currentUser.email)}`;
+                    const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students`;
                     const res = await axios.get(url, headers);
                     // console.log('hostel/warden-students response', res.data);
                     if (res?.data?.Result && res.data.Result.length > 0) {

@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import DefaultBtn from '../../components/Buttons/DefaultBtn'
 import { Link } from 'react-router-dom'
-import { getUserInfoFromToken } from '../../utils/auth' // adjust path as needed
 
 const StdAssignNormal = () => {
     const [students, setStudents] = useState([]) // expects [{ student, allocations }]
@@ -14,11 +13,9 @@ const StdAssignNormal = () => {
     const [selectedRoom, setSelectedRoom] = useState('')
 
     const token = localStorage.getItem('login')
-    const currentUser = useMemo(() => getUserInfoFromToken(), [])
-
     const fetchStudents = useCallback(async () => {
-        if (!token || !currentUser?.email) {
-            setError('Unauthorized: Missing token or user info.')
+        if (!token) {
+            setError('Unauthorized: Missing token.')
             setLoading(false)
             return
         }
@@ -27,7 +24,7 @@ const StdAssignNormal = () => {
             setLoading(true)
             setError(null)
 
-            const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students?wardenEmail=${encodeURIComponent(currentUser.email)}`
+            const url = `${import.meta.env.VITE_APP_API}/hostel/warden-students`
             const res = await axios.get(url, {
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -41,32 +38,24 @@ const StdAssignNormal = () => {
         } finally {
             setLoading(false)
         }
-    }, [token, currentUser.email])
-
-    useEffect(() => {
-        fetchStudents()
-        fetchRooms()
-    }, [fetchStudents, fetchRooms])
-
-    const fetchRooms = async () => {
+    }, [token])
+    const fetchRooms = useCallback(async () => {
         if (!token) return
         setRoomsLoading(true)
         try {
-            // try the warden rooms endpoints in order and normalize various response shapes
             const endpoints = [
                 '/warden/all-rooms',
                 '/room/warden-Rooms',
                 '/room/get-all-rooms',
             ]
 
-                    for (const ep of endpoints) {
+            for (const ep of endpoints) {
                 try {
                     const res = await axios.get(import.meta.env.VITE_APP_API + ep, {
                         headers: { Authorization: `Bearer ${token}` },
                     })
 
                     const data = res?.data || {};
-                    // possible shapes: array, { Result: [...] }, { rooms: [...] }, { result: [...] }, or nested
                     const roomsCandidate = data.Result || data.rooms || data.result || data;
 
                     if (Array.isArray(roomsCandidate) && roomsCandidate.length > 0) {
@@ -74,7 +63,6 @@ const StdAssignNormal = () => {
                         return;
                     }
 
-                    // fallback: maybe data.rooms exists but empty check already handled; try any arrays on common keys
                     if (Array.isArray(data.rooms) && data.rooms.length > 0) {
                         setRooms(data.rooms);
                         return;
@@ -94,7 +82,6 @@ const StdAssignNormal = () => {
                 }
             }
 
-            // nothing returned
             setRooms([])
         } catch (err) {
             console.error('Failed to fetch rooms:', err)
@@ -102,7 +89,12 @@ const StdAssignNormal = () => {
         } finally {
             setRoomsLoading(false)
         }
-    }
+    }, [token])
+
+    useEffect(() => {
+        fetchStudents()
+        fetchRooms()
+    }, [fetchStudents, fetchRooms])
 
     const toggleStudentSelection = (id) => {
         setSelectedStudents((prev) => {
@@ -191,16 +183,15 @@ const StdAssignNormal = () => {
                             <th className="px-6 py-4 font-semibold">Gender</th>
                             <th className="px-6 py-4 font-semibold">Home Town</th>
                             <th className="px-6 py-4 font-semibold">Distance</th>
-                            <th className="px-6 py-4 font-semibold">Room IDs</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {students.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={9} className="text-center py-6 text-gray-400">
-                                    No students found.
-                                </td>
-                            </tr>
+                                    <td colSpan={8} className="text-center py-6 text-gray-400">
+                                        No students found.
+                                    </td>
+                                </tr>
                         )}
                         {students
                             .filter(({ allocations }) =>

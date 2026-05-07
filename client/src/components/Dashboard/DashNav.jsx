@@ -8,8 +8,31 @@ const DashNav = () => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
 
-    const { username, roles } = getUserInfoFromToken();
-    const role = roles[0]?.name || '';
+    const { username, roles } = getUserInfoFromToken() || {};
+    const role = roles?.[0]?.name || '';
+
+    // profile image state - read from localStorage or fallback to default
+    const [profileImage, setProfileImage] = useState(() => {
+        try {
+            return localStorage.getItem('profileImage') || DashUser;
+        } catch {
+            return DashUser;
+        }
+    });
+
+    // listen for profile image updates from other parts of the app
+    useEffect(() => {
+        const handler = (e) => {
+            try {
+                const img = e?.detail || localStorage.getItem('profileImage') || DashUser;
+                setProfileImage(img);
+            } catch {
+                setProfileImage(DashUser);
+            }
+        };
+        window.addEventListener('profileImageUpdated', handler);
+        return () => window.removeEventListener('profileImageUpdated', handler);
+    }, []);
 
 
     const toggleMenu = () => setMenuOpen(prev => !prev);
@@ -54,9 +77,9 @@ const DashNav = () => {
                     style={{ '--tw-ring-color': '#6b0f14' }}
                 >
                     <img
-                        src={DashUser}
+                        src={profileImage}
                         alt={`${username} avatar`}
-                        className="h-11 w-11 rounded-full border-2 shadow-sm"
+                        className="h-11 w-11 rounded-full border-2 shadow-sm object-cover object-center"
                         style={{ borderColor: '#6b0f14' }}
                     />
                     <span className="hidden sm:inline uppercase font-semibold text-[#6b0f14] tracking-wider select-none">
@@ -75,9 +98,9 @@ const DashNav = () => {
                 >
                     <div className="p-5 border-b border-gray-100 text-center">
                         <img
-                            src={DashUser}
+                            src={profileImage}
                             alt={`${username} profile`}
-                            className="h-20 w-20 mx-auto rounded-full border shadow-md"
+                            className="h-20 w-20 mx-auto rounded-full border shadow-md object-cover object-center"
                         />
                         <h2 className="pt-3 text-lg font-bold text-slate-900">{username}</h2>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{role}</p>

@@ -186,7 +186,16 @@ const authController = {
                 return res.json({ Error: "The Password is Not Match" })
             }
 
-            const token = jwt.sign({ id: checkuser._id, role: checkuser.roles, user: checkuser }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            // Do not embed password hash in the token payload.
+            const safeUser = {
+                _id: checkuser._id,
+                username: checkuser.username,
+                email: checkuser.email,
+                roles: checkuser.roles,
+                profileImage: checkuser.profileImage || ''
+            };
+
+            const token = jwt.sign({ id: checkuser._id, role: checkuser.roles, user: safeUser }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
             if (token) {
                 return res.json({ Status: "Success", Message: "Login Success", Token: token })
@@ -360,13 +369,43 @@ const authController = {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const email = decoded.user.email;
 
-            const user = await User.findOne({ email }).populate('roles');
+            const user = await User.findOne({ email }).select('-password').populate('roles');
 
             return res.json({ Result: user })
 
         }
         catch(err){
             console.log(err)
+        }
+    },
+
+    updateProfilePicture: async (req, res) => {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                return res.status(401).json({ Status: 'Fail', Error: 'Unauthorized' });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({ Status: 'Fail', Error: 'Profile image file is required (field: profileImage)' });
+            }
+
+            const profileImage = `/uploads/profile-pictures/${req.file.filename}`;
+
+            const updatedUser = await User.findByIdAndUpdate(
+                userId,
+                { profileImage },
+                { new: true }
+            ).select('-password').populate('roles');
+
+            if (!updatedUser) {
+                return res.status(404).json({ Status: 'Fail', Error: 'User not found' });
+            }
+
+            return res.json({ Status: 'Success', Message: 'Profile picture updated successfully', Result: updatedUser });
+        } catch (err) {
+            console.error('updateProfilePicture error:', err);
+            return res.status(500).json({ Status: 'Fail', Error: 'Internal server error' });
         }
     },
 

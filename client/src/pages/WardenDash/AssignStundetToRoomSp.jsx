@@ -7,7 +7,7 @@ import DefaultBtn from '../../components/Buttons/DefaultBtn';
 const AssignStundetToRoomSp = () => {
     const navigate = useNavigate()
     const { id } = useParams();
-    const { username, roles } = getUserInfoFromToken() || {};
+    const { roles } = getUserInfoFromToken() || {};
     const token = localStorage.getItem('login');
 
     const roleNames = Array.isArray(roles)

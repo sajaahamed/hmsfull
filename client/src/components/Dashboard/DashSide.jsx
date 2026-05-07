@@ -20,13 +20,13 @@ const DashSide = () => {
     // Filter menu based on role
     const filteredMenu = dashsidedata.filter(item => {
         if (roleNames.includes('admin') || roleNames.includes('director')) {
-            return ![3, 5, 7, 12, 13].includes(item.id); 
+            return ![3, 5, 7, 12, 13, 14].includes(item.id); 
         }
         if (roleNames.includes('warden')) {
-            return ![2, 4, 6, 9, 10, 11, 12,].includes(item.id); 
+            return ![2, 4, 6, 9, 10, 11, 12, 13, 16].includes(item.id); 
         }
         if (roleNames.includes('student')) {
-            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 13].includes(item.id); 
+            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16].includes(item.id); 
         }
         return false; // All others get no menu
     });
@@ -64,8 +64,8 @@ const DashSide = () => {
 
     return (
         <aside
-            className="shadow-lg min-h-screen p-4 pb-10 flex flex-col xl:rounded-r-3xl
-                overflow-y-auto scrollbar-thin transition-all duration-300"
+            className="shadow-lg h-full p-4 pb-10 flex flex-col xl:rounded-r-3xl
+                overflow-y-auto scrollbar-modern transition-all duration-300"
             style={{ background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)', color: '#fff', borderRight: '1px solid rgba(212,175,55,0.15)' }}
         >
             <div className="mb-6 flex justify-center">

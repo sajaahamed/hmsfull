@@ -17,17 +17,23 @@ const AllStudents = () => {
     const [allstds, setAllStds] = useState([])
     const [filteredStudents, setFilteredStudents] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
+    const [allHostels, setAllHostels] = useState([])
     
-        const [sortOrder, setSortOrder] = useState('asc') // 'asc' or 'desc' for enrolmentNo
+    const [sortOrder, setSortOrder] = useState('asc') // 'asc' or 'desc' for enrolmentNo
     const [assignmentStatus, setAssignmentStatus] = useState('All')
     const [minDistance, setMinDistance] = useState('')
     const [maxDistance, setMaxDistance] = useState('')
     const [genderFilter, setGenderFilter] = useState('')
     const [departmentFilter, setDepartmentFilter] = useState('')
     const [yearFilter, setYearFilter] = useState('')
+    const [hostelFilter, setHostelFilter] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
     const recordsPerPage = 15
     const token = localStorage.getItem('login')
+
+    const isStudentAssigned = (student) => {
+        return student?.isAssign === true || Boolean(student?.hostelId || student?.hostelName)
+    }
 
     const getMainDept = enrolNo => {
         if (!enrolNo) return ''
@@ -60,6 +66,23 @@ const AllStudents = () => {
             })
             .catch(err => console.log(err))
     }, [token])
+
+    useEffect(() => {
+        axios
+            .get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            .then(res => setAllHostels(res.data.Result || []))
+            .catch(err => console.error('Failed to fetch hostels:', err))
+    }, [token])
+
+    const hostelOptions = React.useMemo(() => {
+        const opts = (allHostels || [])
+            .filter(h => h && h._id)
+            .map(h => ({ value: h._id, label: h.name || h.hostelID || 'Hostel' }))
+            .sort((a, b) => (a.label || '').localeCompare((b.label || ''), undefined, { sensitivity: 'base' }))
+        return [{ value: '', label: 'All Hostels' }, ...opts]
+    }, [allHostels])
 
     // parent -> Array of sub objects { value, label, type }
     const parentSubMap = React.useMemo(() => {
@@ -192,12 +215,13 @@ const AllStudents = () => {
                 student.enrolmentNo?.toLowerCase().includes(term) ||
                 student.indexNo?.toLowerCase().includes(term)
 
+            const assigned = isStudentAssigned(student)
             const matchesAssigned =
                 assignmentStatus === 'All'
                     ? true
                     : assignmentStatus === 'Assigned'
-                        ? student.isAssign === true
-                        : student.isAssign !== true
+                        ? assigned
+                        : !assigned
 
             const matchesDistance =
                 (minDistance === '' || (student.distance && student.distance >= Number(minDistance))) &&
@@ -225,7 +249,9 @@ const AllStudents = () => {
 
             const matchesYear = yearFilter === '' || getYear(student.enrolmentNo) === yearFilter
 
-            return matchesSearch && matchesAssigned && matchesDistance && matchesGender && matchesDepartment && matchesYear
+            const matchesHostel = hostelFilter === '' || String(student.hostelId || '') === String(hostelFilter)
+
+            return matchesSearch && matchesAssigned && matchesDistance && matchesGender && matchesDepartment && matchesYear && matchesHostel
         })
 
         // sort by enrolmentNo (if present)
@@ -239,7 +265,7 @@ const AllStudents = () => {
 
         setFilteredStudents(filtered)
         setCurrentPage(1)
-    }, [searchTerm, allstds, assignmentStatus, minDistance, maxDistance, genderFilter, departmentFilter, yearFilter, sortOrder])
+    }, [searchTerm, allstds, assignmentStatus, minDistance, maxDistance, genderFilter, departmentFilter, yearFilter, hostelFilter, sortOrder])
 
     const totalPages = Math.ceil(filteredStudents.length / recordsPerPage)
     const paginatedData = filteredStudents.slice(
@@ -261,7 +287,7 @@ const AllStudents = () => {
                 std.address3 || '', std.fullAddress || '', std.email || '', (std.phone1 ? "'" + std.phone1 : ''), (std.phone2 ? "'" + std.phone2 : ''),
                 std.genEnglishMarks ?? '', std.intake || '',
                 std.dateOfEnrolment ? new Date(std.dateOfEnrolment).toLocaleDateString() : '',
-                std.distance ?? '', std.isAssign ? 'Assigned' : 'Not Assigned'
+                std.distance ?? '', (std.hostelName || (isStudentAssigned(std) ? 'Assigned' : 'Not Assigned'))
             ]
         })
 
@@ -322,6 +348,16 @@ const AllStudents = () => {
                         { value: 'Unassigned', label: 'Unassigned' },
                     ]}
                     className="w-32"
+                />
+
+                <Dropdown
+                    inline
+                    label="Hostel"
+                    name="hostelFilter"
+                    value={hostelFilter}
+                    onChange={e => setHostelFilter(e.target.value)}
+                    options={hostelOptions}
+                    className="w-44"
                 />
 
                 <DefaultInput
@@ -416,9 +452,9 @@ const AllStudents = () => {
                                     <td className="px-6 py-4">{data.address3}</td>
                                     <td className="px-6 py-4">{data.distance} Km</td>
                                     <td className="px-6 py-4">
-                                        {data.isAssign ? (
+                                        {isStudentAssigned(data) ? (
                                             <span className="bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-3 py-1 rounded-full">
-                                                Assigned
+                                                {data.hostelName || 'Assigned'}
                                             </span>
                                         ) : (
                                             <span className="bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full">

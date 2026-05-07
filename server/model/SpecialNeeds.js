@@ -1,9 +1,14 @@
 const mongoose = require('mongoose');
 
 const specialNeedsSchema = new mongoose.Schema({
-    regNo: { type: String, ref: 'Student' },
+    regNo: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     needs: { type: String, required: true },
-    isAccpeted: {type: Boolean, default: false }
+    isAccpeted: { type: Boolean, default: false },
+    decision: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    }
 }, {timestamps: true});
 
 module.exports = mongoose.model('SpecialNeeds', specialNeedsSchema);

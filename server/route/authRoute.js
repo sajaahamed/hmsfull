@@ -2,6 +2,7 @@ const express = require('express');
 const authController = require('../controller/authController');
 const { authMiddleware } = require('../middlewares/AuthMiddleware');
 const checkPermission = require('../middlewares/checkPermissionMiddleware');
+const uploadProfilePicture = require('../middlewares/UploadProfilePictureMiddleware');
 
 
 const router = express.Router();
@@ -30,5 +31,8 @@ router.post('/delete-role-permission', authMiddleware, checkPermission('delete-r
 router.get('/get-currentuser-data', authMiddleware, checkPermission('view-current-user'), authController.getmebyemail)
 
 router.post('/update-password-dashboard', authMiddleware, checkPermission('update-password-dash'), authController.updatepassviaDash)
+
+// Self-service: update current user's profile picture
+router.post('/update-profile-picture', authMiddleware, uploadProfilePicture.single('profileImage'), authController.updateProfilePicture)
 
 module.exports = router;

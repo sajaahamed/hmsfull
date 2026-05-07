@@ -11,12 +11,27 @@ const WardenPayments = () => {
     const [submitting, setSubmitting] = useState(false);
     const [studentSearch, setStudentSearch] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [selectedStudentOption, setSelectedStudentOption] = useState(null);
+    const [, setSelectedStudentOption] = useState(null);
     const inputRef = useRef(null);
     const dropdownRef = useRef(null);
 
     const token = localStorage.getItem('login');
     const currentUser = useMemo(() => getUserInfoFromToken(), []);
+    const roles = currentUser?.roles;
+
+    const roleNames = useMemo(() => {
+        const raw = Array.isArray(roles)
+            ? roles.map(r => (typeof r === 'string' ? r : r?.name))
+            : [typeof roles === 'string' ? roles : roles?.name];
+
+        return raw.filter(Boolean).map(r => String(r).toLowerCase());
+    }, [roles]);
+
+    const isWarden = roleNames.includes('warden');
+    const isPrivilegedViewer = roleNames.includes('admin') || roleNames.includes('director');
+    const [hostels, setHostels] = useState([]);
+    const [selectedHostelId, setSelectedHostelId] = useState('');
+    const apiBase = import.meta.env.VITE_APP_API;
 
     // Handle outside click to close dropdown
     useEffect(() => {
@@ -41,25 +56,44 @@ const WardenPayments = () => {
                 return;
             }
 
+
+            const apiBase = import.meta.env.VITE_APP_API;
+            const paymentsUrl = isWarden
+                ? `${apiBase}/warden/payments`
+                : isPrivilegedViewer
+                    ? `${apiBase}/admin/payments${selectedHostelId ? `?hostelId=${selectedHostelId}` : ''}`
+                    : null;
+
+            if (!paymentsUrl) {
+                setError('Forbidden: you do not have access to payments');
+                setLoading(false);
+                return;
+            }
+
             try {
                 setLoading(true);
+                setError(null);
 
-                // Fetch students allocated to this warden's hostel (wardenEmail optional)
-                const studentsUrl = currentUser?.email
-                    ? `${import.meta.env.VITE_APP_API}/hostel/warden-students?wardenEmail=${encodeURIComponent(currentUser.email)}`
-                    : `${import.meta.env.VITE_APP_API}/hostel/warden-students`;
+                if (isWarden) {
+                    // Fetch students allocated to this warden's hostel (wardenEmail optional)
+                    const studentsUrl = currentUser?.email
+                        ? `${apiBase}/hostel/warden-students?wardenEmail=${encodeURIComponent(currentUser.email)}`
+                        : `${apiBase}/hostel/warden-students`;
 
-                const studsRes = await axios.get(studentsUrl, {
+                    const studsRes = await axios.get(studentsUrl, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setStudents(studsRes.data.Result || []);
+                } else {
+                    setStudents([]);
+                }
+
+                const payRes = await axios.get(paymentsUrl, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setStudents(studsRes.data.Result || []);
 
-                // Fetch payments
-                const payRes = await axios.get(`${import.meta.env.VITE_APP_API}/warden/payments`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-
-                setPayments(payRes.data.Result || []);
+                const paymentData = payRes.data.Result || payRes.data.result || [];
+                setPayments(paymentData);
             } catch (err) {
                 // Provide detailed error information to the UI for troubleshooting
                 const serverMsg = err?.response?.data?.Error || err?.response?.data?.message || JSON.stringify(err?.response?.data) || err.message;
@@ -71,10 +105,32 @@ const WardenPayments = () => {
         };
 
         fetchData();
-    }, [token, currentUser]);
+    }, [token, currentUser, isWarden, isPrivilegedViewer, selectedHostelId]);
+
+    // Fetch hostels list for privileged viewers (admin/director) so they can filter payments by hostel
+    useEffect(() => {
+        if (!isPrivilegedViewer) return;
+        const apiBase = import.meta.env.VITE_APP_API;
+        const fetchHostels = async () => {
+            try {
+                const res = await axios.get(`${apiBase}/hostel/get-all-hostels`, { headers: { Authorization: `Bearer ${token}` } });
+                setHostels(res.data.Result || res.data.result || []);
+            } catch (err) {
+                console.error('fetch hostels error', err?.response?.data || err.message);
+            }
+        };
+
+        fetchHostels();
+    }, [isPrivilegedViewer, token]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!isWarden) {
+            setError('Forbidden: only wardens can collect payments');
+            return;
+        }
+
         if (!form.studentId || !form.amount) return setError('Student and amount required');
 
         setSubmitting(true);
@@ -93,12 +149,14 @@ const WardenPayments = () => {
             });
 
             if (res.data.Status === 'Success') {
-                // refresh payments
                 const payRes = await axios.get(`${import.meta.env.VITE_APP_API}/warden/payments`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setPayments(payRes.data.Result || []);
+
+                const paymentData = payRes.data.Result || payRes.data.result || [];
+                setPayments(paymentData);
                 setForm({ studentId: '', amount: '', type: 'hostel-fee', note: '', paidDate: new Date().toISOString().split('T')[0] });
+                setStudentSearch('');
                 setSelectedStudentOption(null);
             } else {
                 setError(res.data.Error || res.data.message || 'Failed to collect payment');
@@ -108,6 +166,52 @@ const WardenPayments = () => {
             setError(err.response?.data?.Error || err.message || 'Submission failed');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleExport = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const url = isWarden
+                ? `${apiBase}/warden/payments/export`
+                : `${apiBase}/admin/payments/export${selectedHostelId ? `?hostelId=${selectedHostelId}` : ''}`;
+
+            const resp = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' });
+
+            const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/octet-stream' });
+            let filename = 'payments.xlsx';
+            const disposition = resp.headers['content-disposition'] || resp.headers['Content-Disposition'] || '';
+            const m = disposition.match(/filename\*?=([^;]+)/);
+            if (m && m[1]) {
+                filename = m[1].replace(/UTF-8''/, '').replace(/"/g, '').trim();
+            }
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+        } catch (err) {
+            console.error('export error', err);
+            // If server returned a blob (HTML or error body), try to read it as text for a helpful message
+            try {
+                const respData = err?.response?.data;
+                if (respData && typeof respData.text === 'function') {
+                    const txt = await respData.text();
+                    setError(txt || err.message || 'Export failed');
+                } else {
+                    setError(err?.response?.data?.Error || err?.message || 'Export failed');
+                }
+            } catch (readErr) {
+                console.error('error reading export error blob', readErr);
+                setError(err?.message || 'Export failed');
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -133,6 +237,13 @@ const WardenPayments = () => {
         }) || null;
     }, [students, form.studentId]);
 
+    const formatDateOnly = (val) => {
+        if (!val) return '-';
+        const d = new Date(val);
+        if (isNaN(d)) return '-';
+        return d.toISOString().split('T')[0];
+    };
+
     if (loading) return <div className="p-4 text-center">Loading...</div>;
     if (error) return <div className="p-4 text-center text-red-600">{error}</div>;
 
@@ -140,7 +251,8 @@ const WardenPayments = () => {
         <div className="mt-8">
             <div className="mb-4 font-semibold text-gray-700">Payments Management</div>
 
-            <div className="mb-6 p-4 bg-white rounded shadow">
+            {isWarden && (
+                <div className="mb-6 p-4 bg-white rounded shadow">
                 <form onSubmit={handleSubmit} className="space-y-3">
                     <div style={{ position: 'relative' }}>
                         <label className="block text-sm font-medium mb-1">Student</label>
@@ -230,7 +342,26 @@ const WardenPayments = () => {
                         <button type="button" onClick={() => setForm({ studentId: '', amount: '', type: 'hostel-fee', note: '', paidDate: new Date().toISOString().split('T')[0] })} className="px-4 py-2 bg-gray-200 rounded">Reset</button>
                     </div>
                 </form>
-            </div>
+                </div>
+            )}
+
+            {isPrivilegedViewer && (
+                <div className="mb-4 flex items-center gap-3">
+                    <label className="block text-sm font-medium">Filter by Hostel</label>
+                    <select value={selectedHostelId} onChange={e => setSelectedHostelId(e.target.value)} className="px-3 py-2 border rounded">
+                        <option value="">All hostels</option>
+                        {hostels.map(h => (
+                            <option key={h._id} value={h._id}>{h.name || h.hostelID || h._id}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            {(isWarden || isPrivilegedViewer) && (
+                <div className="mb-3 flex justify-end">
+                    <button onClick={handleExport} className="px-4 py-2 bg-[#6b0f14] text-white rounded">Export Excel</button>
+                </div>
+            )}
 
             <div className="overflow-x-auto rounded-2xl shadow-lg bg-white">
                 <table className="min-w-full text-sm text-left text-gray-600">
@@ -239,22 +370,32 @@ const WardenPayments = () => {
                             <th className="px-6 py-3">No</th>
                             <th className="px-6 py-3">Reg No</th>
                             <th className="px-6 py-3">Enrollment No</th>
+                            <th className="px-6 py-3">Hostel</th>
                             <th className="px-6 py-3">Room No</th>
                             <th className="px-6 py-3">Hall Fee</th>
                             <th className="px-6 py-3">Date</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {payments.map((p, idx) => (
-                            <tr key={p._id || idx} className="hover:bg-[#fefaf0]">
-                                <td className="px-6 py-3">{idx + 1}</td>
-                                <td className="px-6 py-3">{p.studentId?.no || '-'}</td>
-                                <td className="px-6 py-3">{p.studentId?.enrolmentNo || '-'}</td>
-                                <td className="px-6 py-3">{p.roomNo || '-'}</td>
-                                <td className="px-6 py-3">{p.amount}</td>
-                                <td className="px-6 py-3">{p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-'}</td>
+                        {payments.length === 0 ? (
+                            <tr>
+                                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                                    No payment records found
+                                </td>
                             </tr>
-                        ))}
+                        ) : (
+                            payments.map((p, idx) => (
+                                <tr key={p._id || idx} className="hover:bg-[#fefaf0]">
+                                    <td className="px-6 py-3">{idx + 1}</td>
+                                    <td className="px-6 py-3">{p.studentId?.no || '-'}</td>
+                                    <td className="px-6 py-3">{p.studentId?.enrolmentNo || '-'}</td>
+                                    <td className="px-6 py-3">{p.hostelName || '-'}</td>
+                                    <td className="px-6 py-3">{p.roomNo || '-'}</td>
+                                    <td className="px-6 py-3">{p.amount}</td>
+                                    <td className="px-6 py-3">{formatDateOnly(p.paidDate)}</td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>

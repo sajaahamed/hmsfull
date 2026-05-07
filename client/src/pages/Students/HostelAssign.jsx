@@ -13,8 +13,29 @@ const HostelAssign = () => {
         search: '',
         distance: '',
         gender: '',
+        intakeYear: '',
     })
     const token = localStorage.getItem('login')
+
+    const getIntakeYearCode = (enrolmentNo) => {
+        const parts = String(enrolmentNo ?? '').split('/').filter(Boolean)
+        return parts[1] || ''
+    }
+
+    const intakeYearOptions = React.useMemo(() => {
+        const years = new Set()
+        ;(getallstudents || []).forEach(s => {
+            const y = getIntakeYearCode(s?.enrolmentNo)
+            if (y) years.add(y)
+        })
+
+        return Array.from(years)
+            .sort()
+            .map(y => ({
+                value: y,
+                label: String(y).length === 2 ? `20${y}` : String(y)
+            }))
+    }, [getallstudents])
 
     const [allhostels, setAllHostels] = useState([])
     const [selectedHostel, setSelectedHostel] = useState('')
@@ -32,7 +53,7 @@ const HostelAssign = () => {
                 setFilteredStudents(res.data.Result)
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [token])
 
     useEffect(() => {
         axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
@@ -40,10 +61,10 @@ const HostelAssign = () => {
         })
             .then(res => setAllHostels(res.data.Result))
             .catch(err => console.error("Failed to fetch hostels:", err))
-    }, [])
+    }, [token])
 
     useEffect(() => {
-        let filtered = getallstudents
+        let filtered = Array.isArray(getallstudents) ? [...getallstudents] : []
 
         if (filters.search.trim() !== '') {
             const searchTerm = filters.search.toLowerCase()
@@ -65,6 +86,10 @@ const HostelAssign = () => {
 
         if (filters.gender !== '') {
             filtered = filtered.filter(student => student.sex === filters.gender)
+        }
+
+        if (filters.intakeYear !== '') {
+            filtered = filtered.filter(student => getIntakeYearCode(student.enrolmentNo) === filters.intakeYear)
         }
 
         setFilteredStudents(filtered)
@@ -183,7 +208,7 @@ const HostelAssign = () => {
         <div>
             <h1 className="font-bold text-[#6b0f14] text-xl">Assign Students to Hostels</h1>
 
-            <div className="flex flex-wrap gap-4 mt-4 max-w-3xl">
+            <div className="flex flex-nowrap gap-4 mt-4 max-w-4xl overflow-x-auto no-scrollbar">
                 <div className="flex-grow min-w-[250px]">
                     <DefaultInput
                         label="Search Enrolment No / Index No / NIC"
@@ -193,18 +218,8 @@ const HostelAssign = () => {
                         placeholder="Enter enrolment, index or NIC"
                     />
                 </div>
-                <div className="min-w-[150px]">
-                    <DefaultInput
-                        label="Distance ≥"
-                        type="number"
-                        name="distance"
-                        value={filters.distance}
-                        onChange={handleFilterChange}
-                        placeholder="Enter minimum distance"
-                        min="0"
-                    />
-                </div>
-                <div className="min-w-[150px]">
+
+                <div className="min-w-[150px] shrink-0">
                     <Dropdown
                         label="Gender"
                         name="gender"
@@ -214,6 +229,28 @@ const HostelAssign = () => {
                             { label: 'Male', value: 'Male' },
                             { label: 'Female', value: 'Female' },
                         ]}
+                    />
+                </div>
+
+                <div className="min-w-[150px] shrink-0">
+                    <Dropdown
+                        label="Intake Year"
+                        name="intakeYear"
+                        value={filters.intakeYear}
+                        onChange={handleFilterChange}
+                        options={intakeYearOptions}
+                    />
+                </div>
+
+                <div className="min-w-[150px] shrink-0">
+                    <DefaultInput
+                        label="Distance ≥"
+                        type="number"
+                        name="distance"
+                        value={filters.distance}
+                        onChange={handleFilterChange}
+                        placeholder="Enter minimum distance"
+                        min="0"
                     />
                 </div>
             </div>

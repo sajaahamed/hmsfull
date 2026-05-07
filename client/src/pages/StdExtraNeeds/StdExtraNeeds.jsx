@@ -66,6 +66,22 @@ const StdExtraNeeds = () => {
         }
     }
 
+    const handleReject = async (id) => {
+        try {
+            const res = await axios.post(import.meta.env.VITE_APP_API + '/warden/reject-need/' + id, {}, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.data.Status === "Success") {
+                alert("Student Need Rejected")
+                window.location.reload()
+            } else {
+                alert(res.data.Error)
+            }
+        } catch (err) {
+            console.log(err)
+        }
+    }
+
     return (
         <div className="p-6 max-w-7xl mx-auto">
             <div className="mb-4">
@@ -91,6 +107,9 @@ const StdExtraNeeds = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {(currentItems || []).length > 0 ? currentItems.map((data, index) => (
+                            (() => {
+                                const decision = data?.decision || (data?.isAccpeted ? 'approved' : 'pending')
+                                return (
                             <tr key={data._id} className="hover:bg-[#fefaf0] transition-all duration-150">
                                 <td className="px-6 py-4 font-medium text-gray-800">
                                     {indexOfFirstItem + index + 1}
@@ -100,30 +119,47 @@ const StdExtraNeeds = () => {
                                 </td>
                                 <td className="px-6 py-4">{data.needs}</td>
                                 <td className="px-6 py-4">
-                                    {data.isAccpeted === true && (
+                                    {decision === 'approved' && (
                                         <span className="flex items-center gap-1 bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-3 py-1 rounded-full uppercase">
                                             <FaRegCheckSquare className="h-4 w-auto" /> Approved
                                         </span>
                                     )}
-                                    {data.isAccpeted === false && (
+                                    {decision === 'rejected' && (
+                                        <span className="flex items-center gap-1 bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full uppercase">
+                                            Rejected
+                                        </span>
+                                    )}
+                                    {decision === 'pending' && (
                                         <span className="flex items-center gap-1 bg-yellow-100 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full uppercase">
-                                            <BsHouseGearFill className="h-4 w-auto" /> Pending / Rejected
+                                            <BsHouseGearFill className="h-4 w-auto" /> Pending
                                         </span>
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
-                                    {data.isAccpeted === true ? (
+                                    {decision === 'approved' ? (
                                         <div className="text-[#4f0a0f]">Approved</div>
+                                    ) : decision === 'rejected' ? (
+                                        <div className="text-red-700">Rejected</div>
                                     ) : (
-                                        <div
-                                            className="text-[#4f0a0f] hover:underline cursor-pointer"
-                                            onClick={() => headleApprove(data._id)}
-                                        >
-                                            Approve
+                                        <div className="flex items-center gap-4">
+                                            <div
+                                                className="text-[#4f0a0f] hover:underline cursor-pointer"
+                                                onClick={() => headleApprove(data._id)}
+                                            >
+                                                Approve
+                                            </div>
+                                            <div
+                                                className="text-red-700 hover:underline cursor-pointer"
+                                                onClick={() => handleReject(data._id)}
+                                            >
+                                                Reject
+                                            </div>
                                         </div>
                                     )}
                                 </td>
                             </tr>
+                                )
+                            })()
                         )) : (
                             <tr>
                                 <td colSpan="5" className="px-6 py-4 text-center text-gray-500">

@@ -5,6 +5,7 @@ const User = require("../model/User");
 const Warden = require("../model/Warden");
 const Payment = require("../model/Payment");
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 const { jwtDecode } = require('jwt-decode');
 const { getoneHostel } = require("./hostelController");
 const Hostel = require("../model/Hostel");
@@ -13,62 +14,191 @@ const Room = require("../model/Room");
 const WardenController = {
     getstdextraneeds: async (req, res) => {
         try {
-            const authHeader = req.headers.authorization || '';
-            const token = authHeader.replace('Bearer ', '');
-            if (!token) return res.json({ message: 'Unauthorized: No token provided' });
+            const userId = req.user?.id;
+            if (!userId) {
+                return res.status(401).json({ message: 'Unauthorized' });
+            }
 
-            const decoded = jwtDecode(token);
-            const email = decoded.email || decoded.user?.email;
+            // Find warden record and hostel
+            const wardenRecord = await Warden.findOne({ userId }).populate('hostelId');
+            if (!wardenRecord || !wardenRecord.hostelId) {
+                return res.status(404).json({ message: 'Warden record not found' });
+            }
 
-            // Find logged in user
-            const userid = await User.findOne({ email: email });
-            if (!userid) return res.json({ message: 'User not found' });
+            // Get allocated students in warden's hostel.
+            // NOTE: Allocation.studentId is the intended field, but some datasets store the student ObjectId in Allocation.regNo.
+            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId._id, active: true })
+                .select('studentId regNo')
+                .lean();
 
-            // Find warden record
-            const getwarden = await Warden.findOne({ userId: userid._id }).populate('hostelId');
-            if (!getwarden) return res.json({ message: 'Warden record not found' });
+            if (!allocations.length) {
+                return res.json({ Result: [] });
+            }
 
-            // Find students allocated to warden's hostel
-            const getstudents = await Allocation.find({ hostelID: getwarden.hostelId._id });
-            if (!getstudents.length) return res.json({ message: 'No students allocated' });
+            const studentIdSet = new Set();
+            const enrolmentNos = [];
+            for (const a of allocations) {
+                if (a.studentId) studentIdSet.add(a.studentId.toString());
+                if (a.regNo && mongoose.Types.ObjectId.isValid(a.regNo)) {
+                    studentIdSet.add(a.regNo.toString());
+                } else if (a.regNo && !a.studentId) {
+                    enrolmentNos.push(a.regNo);
+                }
+            }
 
-            // Extract regNos
-            const regNos = getstudents.map(s => s.regNo);
+            if (enrolmentNos.length) {
+                const resolvedStudents = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id').lean();
+                for (const s of resolvedStudents) {
+                    if (s?._id) studentIdSet.add(s._id.toString());
+                }
+            }
 
-            // Find special needs of these students
-            const getstduntneeds = await SpecialNeeds.find({ regNo: { $in: regNos } }).populate('regNo');
+            const studentIds = Array.from(studentIdSet);
+            const needs = await SpecialNeeds.find({ regNo: { $in: studentIds } })
+                .populate('regNo')
+                .sort({ createdAt: -1 });
 
-            // ✅ Only log special needs data
-            // console.log("Special needs records:", JSON.stringify(getstduntneeds, null, 2));
-
-            return res.json({ Result: getstduntneeds });
+            return res.json({ Result: needs });
         }
         catch (err) {
             console.error("Error occurred:", err);
-            return res.json({ message: 'Server error', error: err.message });
+            return res.status(500).json({ message: 'Server error', error: err.message });
         }
     },
 
 
     approveneeds: async (req, res) => {
         try {
-            const id = req.params.id;
+            const userId = req.user?.id;
+            const { id } = req.params;
 
-            const udpdateneed = await SpecialNeeds.findByIdAndUpdate(
-                id,
-                { $set: { isAccpeted: true } },
-                { new: true }
-            );
-
-            if (udpdateneed) {
-                return res.json({ Status: "Success", data: udpdateneed });
-            } else {
-                return res.json({ Error: "SpecialNeed not found" });
+            if (!userId) {
+                return res.status(401).json({ Status: 'Fail', Error: 'Unauthorized' });
             }
+
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({ Status: 'Fail', Error: 'Invalid special need id' });
+            }
+
+            const need = await SpecialNeeds.findById(id);
+            if (!need) {
+                return res.status(404).json({ Status: 'Fail', Error: 'SpecialNeed not found' });
+            }
+
+            const wardenRecord = await Warden.findOne({ userId });
+            if (!wardenRecord || !wardenRecord.hostelId) {
+                return res.status(403).json({ Status: 'Fail', Error: 'Warden hostel not found' });
+            }
+
+            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId, active: true })
+                .select('studentId regNo')
+                .lean();
+
+            const allowedStudentIdSet = new Set();
+            const enrolmentNos = [];
+            for (const a of allocations) {
+                if (a.studentId) allowedStudentIdSet.add(a.studentId.toString());
+                if (a.regNo && mongoose.Types.ObjectId.isValid(a.regNo)) {
+                    allowedStudentIdSet.add(a.regNo.toString());
+                } else if (a.regNo && !a.studentId) {
+                    enrolmentNos.push(a.regNo);
+                }
+            }
+
+            if (enrolmentNos.length) {
+                const resolvedStudents = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id').lean();
+                for (const s of resolvedStudents) {
+                    if (s?._id) allowedStudentIdSet.add(s._id.toString());
+                }
+            }
+
+            const needStudentId = need.regNo?.toString();
+            if (!needStudentId || !allowedStudentIdSet.has(needStudentId)) {
+                return res.status(403).json({ Status: 'Fail', Error: 'Forbidden: not a student in your hostel' });
+            }
+
+            const currentDecision = need.decision || (need.isAccpeted ? 'approved' : 'pending');
+            if (currentDecision !== 'pending') {
+                return res.status(400).json({ Status: 'Fail', Error: `This request is already ${currentDecision}` });
+            }
+
+            need.isAccpeted = true;
+            need.decision = 'approved';
+            await need.save();
+
+            return res.json({ Status: 'Success', data: need });
 
         }
         catch (err) {
             console.log(err)
+            return res.status(500).json({ Status: 'Fail', Error: 'Server error', details: err.message });
+        }
+    },
+
+    rejectneeds: async (req, res) => {
+        try {
+            const userId = req.user?.id;
+            const { id } = req.params;
+
+            if (!userId) {
+                return res.status(401).json({ Status: 'Fail', Error: 'Unauthorized' });
+            }
+
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({ Status: 'Fail', Error: 'Invalid special need id' });
+            }
+
+            const need = await SpecialNeeds.findById(id);
+            if (!need) {
+                return res.status(404).json({ Status: 'Fail', Error: 'SpecialNeed not found' });
+            }
+
+            const wardenRecord = await Warden.findOne({ userId });
+            if (!wardenRecord || !wardenRecord.hostelId) {
+                return res.status(403).json({ Status: 'Fail', Error: 'Warden hostel not found' });
+            }
+
+            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId, active: true })
+                .select('studentId regNo')
+                .lean();
+
+            const allowedStudentIdSet = new Set();
+            const enrolmentNos = [];
+            for (const a of allocations) {
+                if (a.studentId) allowedStudentIdSet.add(a.studentId.toString());
+                if (a.regNo && mongoose.Types.ObjectId.isValid(a.regNo)) {
+                    allowedStudentIdSet.add(a.regNo.toString());
+                } else if (a.regNo && !a.studentId) {
+                    enrolmentNos.push(a.regNo);
+                }
+            }
+
+            if (enrolmentNos.length) {
+                const resolvedStudents = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id').lean();
+                for (const s of resolvedStudents) {
+                    if (s?._id) allowedStudentIdSet.add(s._id.toString());
+                }
+            }
+
+            const needStudentId = need.regNo?.toString();
+            if (!needStudentId || !allowedStudentIdSet.has(needStudentId)) {
+                return res.status(403).json({ Status: 'Fail', Error: 'Forbidden: not a student in your hostel' });
+            }
+
+            const currentDecision = need.decision || (need.isAccpeted ? 'approved' : 'pending');
+            if (currentDecision !== 'pending') {
+                return res.status(400).json({ Status: 'Fail', Error: `This request is already ${currentDecision}` });
+            }
+
+            need.isAccpeted = false;
+            need.decision = 'rejected';
+            await need.save();
+
+            return res.json({ Status: 'Success', data: need });
+        }
+        catch (err) {
+            console.log(err)
+            return res.status(500).json({ Status: 'Fail', Error: 'Server error', details: err.message });
         }
     },
 
@@ -156,9 +286,23 @@ const WardenController = {
 
     assigned_students: async (req, res) => {
         try {
-            const getallstds = await Allocation.find()
+            const userId = req.user?.id;
+            if (!userId) {
+                return res.status(401).json({ Error: 'Unauthorized' });
+            }
+
+            const wardenRecord = await Warden.findOne({ userId });
+            if (!wardenRecord || !wardenRecord.hostelId) {
+                return res.status(403).json({ Error: 'Warden hostel not found' });
+            }
+
+            const getallstds = await Allocation.find({
+                hostelID: wardenRecord.hostelId,
+                active: true
+            })
                 .populate('regNo')
                 .populate('roomId')
+                .populate('hostelID')
 
             // console.log(getallstds)
             return res.json({ Result: getallstds })
@@ -569,26 +713,95 @@ const WardenController = {
             const wardenRecord = await Warden.findOne({ userId });
             if (!wardenRecord) return res.status(403).json({ Error: 'Warden record not found' });
 
+            // Get allocations for the hostel
             const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId });
-            const studentIds = allocations.map(a => a.regNo).filter(Boolean);
+            console.log(`DEBUG: Found ${allocations.length} allocations for hostel ${wardenRecord.hostelId}`);
 
-            const payments = await Payment.find({ studentId: { $in: studentIds } })
-                .populate('studentId', 'fullName enrolmentNo nic no')
-                .sort({ paidDate: -1 });
+            // Collect student ObjectIds from allocations (if stored) and regNos otherwise.
+            // NOTE: Some legacy data stores Student _id (24-hex) as a string in Allocation.regNo.
+            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
-            // Fetch active allocations to get room numbers for students
-            const allocs = await Allocation.find({ regNo: { $in: studentIds }, active: true }).populate('roomId');
+            const objectIds = allocations
+                .filter(a => a.studentId)
+                .map(a => (a.studentId.toString ? a.studentId.toString() : String(a.studentId)));
+
+            const regNosRaw = allocations
+                .filter(a => !a.studentId && a.regNo)
+                .map(a => String(a.regNo));
+
+            const regNoObjectIds = regNosRaw.filter(v => objectIdPattern.test(v));
+            const enrolmentNos = regNosRaw.filter(v => !objectIdPattern.test(v));
+
+            console.log(`DEBUG: ObjectIds from allocations: ${objectIds.length}, regNos: ${regNosRaw.length} (objectId-like: ${regNoObjectIds.length}, enrolment-like: ${enrolmentNos.length})`);
+
+            // Resolve enrolmentNos to Student _id where possible
+            let resolvedIds = [];
+            if (enrolmentNos.length) {
+                const students = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id enrolmentNo');
+                const map = {};
+                students.forEach(s => { map[s.enrolmentNo] = s._id; });
+                resolvedIds = enrolmentNos.map(r => map[r]).filter(Boolean);
+            }
+
+            const studentIds = Array.from(new Set([
+                ...objectIds,
+                ...regNoObjectIds,
+                ...resolvedIds.map(id => id.toString())
+            ]));
+            console.log(`DEBUG: Total studentIds to search payments for: ${studentIds.length}`);
+            console.log(`DEBUG: StudentIds: ${JSON.stringify(studentIds)}`);
+
+            // Get payments for students in this warden's hostel
+            let payments = [];
+            if (studentIds.length > 0) {
+                payments = await Payment.find({ studentId: { $in: studentIds } })
+                    .populate('studentId', 'fullName enrolmentNo nic no _id')
+                    .sort({ paidDate: -1 });
+                console.log(`DEBUG: Found ${payments.length} payments for allocated students`);
+            }
+
+            // Map allocations to room numbers for the returned payments
+            const studentIdsForLookup = payments.map(p => (p.studentId && p.studentId._id) ? p.studentId._id.toString() : (p.studentId ? p.studentId.toString() : null)).filter(Boolean);
+
+            const allocs = await Allocation.find({
+                $or: [ { regNo: { $in: studentIdsForLookup } }, { studentId: { $in: studentIdsForLookup } } ],
+                active: true
+            }).populate('roomId').populate('hostelID');
+
             const allocMap = {};
             allocs.forEach(a => {
-                const sid = a.regNo ? a.regNo.toString() : (a.studentId ? a.studentId.toString() : null);
+                const sid = a.studentId ? (a.studentId.toString ? a.studentId.toString() : a.studentId) : (a.regNo ? a.regNo.toString() : null);
                 if (!sid) return;
-                allocMap[sid] = a.roomId && a.roomId.roomID ? a.roomId.roomID : null;
+                allocMap[sid] = {
+                    roomNo: a.roomId && a.roomId.roomID ? a.roomId.roomID : null,
+                    hostelName: a.hostelID && a.hostelID.name ? a.hostelID.name : null
+                };
             });
 
             const paymentsWithRoom = payments.map(p => {
                 const pObj = p.toObject ? p.toObject() : p;
-                const sid = pObj.studentId ? pObj.studentId._id.toString() : null;
-                pObj.roomNo = sid && allocMap[sid] ? allocMap[sid] : null;
+                let roomNo = null;
+                let hostelName = null;
+                
+                // Try to find room and hostel using studentId first
+                if (pObj.studentId && pObj.studentId._id) {
+                    const studentIdStr = pObj.studentId._id.toString();
+                    if (allocMap[studentIdStr]) {
+                        roomNo = allocMap[studentIdStr].roomNo || null;
+                        hostelName = allocMap[studentIdStr].hostelName || null;
+                    }
+                }
+                
+                // Fallback: try using enrollment number if studentId lookup failed
+                if (!roomNo && pObj.studentId && pObj.studentId.enrolmentNo) {
+                    if (allocMap[pObj.studentId.enrolmentNo]) {
+                        roomNo = allocMap[pObj.studentId.enrolmentNo].roomNo || null;
+                        hostelName = allocMap[pObj.studentId.enrolmentNo].hostelName || null;
+                    }
+                }
+                
+                pObj.roomNo = roomNo;
+                pObj.hostelName = hostelName;
                 return pObj;
             });
 
@@ -597,6 +810,152 @@ const WardenController = {
             return res.json({ Status: 'Success', Result: paymentsWithRoom, total });
         } catch (err) {
             console.error('getPayments error:', err);
+            return res.status(500).json({ Error: 'Server error', details: err.message });
+        }
+    }
+
+    ,
+    // Export payments for this warden's hostel as Excel
+    exportPayments: async (req, res) => {
+        try {
+            const userId = req.user?.id;
+            if (!userId) return res.status(401).json({ Error: 'Unauthorized' });
+
+            const wardenRecord = await Warden.findOne({ userId });
+            if (!wardenRecord) return res.status(403).json({ Error: 'Warden record not found' });
+
+            // Get allocations for the hostel
+            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId });
+
+            // Collect student ObjectIds from allocations (if stored) and regNos otherwise.
+            // NOTE: Some legacy data stores Student _id (24-hex) as a string in Allocation.regNo.
+            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+
+            const objectIds = allocations
+                .filter(a => a.studentId)
+                .map(a => (a.studentId.toString ? a.studentId.toString() : String(a.studentId)));
+
+            const regNosRaw = allocations
+                .filter(a => !a.studentId && a.regNo)
+                .map(a => String(a.regNo));
+
+            const regNoObjectIds = regNosRaw.filter(v => objectIdPattern.test(v));
+            const enrolmentNos = regNosRaw.filter(v => !objectIdPattern.test(v));
+
+            // Resolve enrolmentNos to Student _id where possible
+            let resolvedIds = [];
+            if (enrolmentNos.length) {
+                const students = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id enrolmentNo');
+                const map = {};
+                students.forEach(s => { map[s.enrolmentNo] = s._id; });
+                resolvedIds = enrolmentNos.map(r => map[r]).filter(Boolean);
+            }
+
+            const studentIds = Array.from(new Set([
+                ...objectIds,
+                ...regNoObjectIds,
+                ...resolvedIds.map(id => id.toString())
+            ]));
+
+            const payments = await Payment.find({ studentId: { $in: studentIds } })
+                .populate('studentId', 'fullName enrolmentNo nic no _id')
+                .sort({ paidDate: -1 });
+
+            // Map allocations to room numbers for the returned payments
+            const studentIdsForLookup = payments.map(p => (p.studentId && p.studentId._id) ? p.studentId._id.toString() : (p.studentId ? p.studentId.toString() : null)).filter(Boolean);
+
+            const allocs = await Allocation.find({
+                $or: [ { regNo: { $in: studentIdsForLookup } }, { studentId: { $in: studentIdsForLookup } } ],
+                active: true
+            }).populate('roomId').populate('hostelID');
+
+            const allocMap = {};
+            allocs.forEach(a => {
+                const sid = a.studentId ? (a.studentId.toString ? a.studentId.toString() : a.studentId) : (a.regNo ? a.regNo.toString() : null);
+                if (!sid) return;
+                allocMap[sid] = {
+                    roomNo: a.roomId && a.roomId.roomID ? a.roomId.roomID : null,
+                    hostelName: a.hostelID && a.hostelID.name ? a.hostelID.name : null
+                };
+            });
+
+            const paymentsWithRoom = payments.map(p => {
+                const pObj = p.toObject ? p.toObject() : p;
+                let roomNo = null;
+                let hostelName = null;
+                
+                // Try to find room and hostel using studentId first
+                if (pObj.studentId && pObj.studentId._id) {
+                    const studentIdStr = pObj.studentId._id.toString();
+                    if (allocMap[studentIdStr]) {
+                        roomNo = allocMap[studentIdStr].roomNo || null;
+                        hostelName = allocMap[studentIdStr].hostelName || null;
+                    }
+                }
+                
+                // Fallback: try using enrollment number if studentId lookup failed
+                if (!roomNo && pObj.studentId && pObj.studentId.enrolmentNo) {
+                    if (allocMap[pObj.studentId.enrolmentNo]) {
+                        roomNo = allocMap[pObj.studentId.enrolmentNo].roomNo || null;
+                        hostelName = allocMap[pObj.studentId.enrolmentNo].hostelName || null;
+                    }
+                }
+                
+                pObj.roomNo = roomNo;
+                pObj.hostelName = hostelName;
+                return pObj;
+            });
+
+            // Prepare rows for Excel; format date properly to avoid timezone issues
+            const rows = paymentsWithRoom.map((p, idx) => {
+                // Convert date to YYYY-MM-DD string format to avoid timezone shifts
+                let paidDateStr = '';
+                if (p.paidDate) {
+                    const date = new Date(p.paidDate);
+                    paidDateStr = date.toISOString().split('T')[0]; // Gets YYYY-MM-DD
+                }
+                
+                return {
+                    '#': idx + 1,
+                    'Reg No': p.studentId?.no || '',
+                    'Enrollment No': p.studentId?.enrolmentNo || '',
+                    'Full Name': p.studentId?.fullName || '',
+                    'Hostel': p.hostelName || '',
+                    'Room No': p.roomNo || '',
+                    'Amount': p.amount || 0,
+                    'Paid Date': paidDateStr,
+                    'Type': p.type || '',
+                    'Note': p.note || ''
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+
+            // Adjust column widths for better readability
+            const colWidths = [
+                { wch: 5 },   // #
+                { wch: 15 },  // Reg No
+                { wch: 18 },  // Enrollment No
+                { wch: 25 },  // Full Name
+                { wch: 20 },  // Hostel
+                { wch: 10 },  // Room No
+                { wch: 12 },  // Amount
+                { wch: 12 },  // Paid Date
+                { wch: 15 },  // Type
+                { wch: 20 }   // Note
+            ];
+            ws['!cols'] = colWidths;
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+
+            const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer', cellDates: true });
+
+            res.setHeader('Content-Disposition', `attachment; filename=payments-warden.xlsx`);
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            return res.send(buf);
+        } catch (err) {
+            console.error('warden exportPayments error:', err);
             return res.status(500).json({ Error: 'Server error', details: err.message });
         }
     }
