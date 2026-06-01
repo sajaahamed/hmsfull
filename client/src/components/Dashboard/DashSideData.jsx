@@ -96,6 +96,12 @@ const dashsidedata = [
         link: '/Dashboard/WardenPayments',
         icon: FaMoneyBillWave
     },
+    {
+        id: 17,
+        name: 'Backup Options',
+        link: '/Dashboard/BackupOptions',
+        icon: FaGear
+    },
 ]
 
 export { dashsidedata }

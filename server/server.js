@@ -5,6 +5,8 @@ const cors = require('cors');
 const path = require('path');
 const bodyParser = require('body-parser');
 
+const { initBackupScheduler } = require('./utils/backupScheduler');
+
 
 // routes
 const ConnectDB = require('./config/DB');
@@ -21,6 +23,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 ConnectDB();
+initBackupScheduler();
 
 app.use(cors());
 app.use(express.json());

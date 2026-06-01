@@ -212,8 +212,7 @@ const AllStudents = () => {
         const filtered = allstds.filter(student => {
             const matchesSearch =
                 student.nic?.toLowerCase().includes(term) ||
-                student.enrolmentNo?.toLowerCase().includes(term) ||
-                student.indexNo?.toLowerCase().includes(term)
+                student.enrolmentNo?.toLowerCase().includes(term)
 
             const assigned = isStudentAssigned(student)
             const matchesAssigned =
@@ -275,17 +274,17 @@ const AllStudents = () => {
 
     const exportToCSV = () => {
         const headers = [
-            'No', 'Enrolment No', 'Index No', 'Name', 'Title', 'Last Name', 'Initials', 'Full Name', 'A/L District',
-            'Sex', 'Z-Score', 'Medium', 'NIC', 'Address Line 1', 'Address Line 2', 'Address Line 3', 'Full Address',
-            'Email', 'Phone 1', 'Phone 2', 'General English Marks', 'Intake', 'Date of Enrolment', 'Distance (Km)', 'Hostel Assigned'
+            'No', 'Enrolment No', 'Name', 'Title', 'Last Name', 'Initials', 'Full Name', 'A/L District',
+            'Sex', 'Medium', 'NIC', 'Address Line 1', 'Address Line 2', 'Address Line 3', 'Full Address',
+            'Email', 'Phone 1', 'Phone 2', 'Intake', 'Date of Enrolment', 'Distance (Km)', 'Hostel Assigned'
         ]
         const rows = filteredStudents.map(std => {
             return [
-                std.no || '', std.enrolmentNo || '', std.indexNo || '', std.name || '', std.title || '',
+                std.no || '', std.enrolmentNo || '', std.name || '', std.title || '',
                 std.lastName || '', std.initials || '', std.fullName || '', std.alDistrict || '', std.sex || '',
-                std.zScore ?? '', std.medium || '', (std.nic ? "'" + std.nic : ''), std.address1 || '', std.address2 || '',
+                std.medium || '', (std.nic ? "'" + std.nic : ''), std.address1 || '', std.address2 || '',
                 std.address3 || '', std.fullAddress || '', std.email || '', (std.phone1 ? "'" + std.phone1 : ''), (std.phone2 ? "'" + std.phone2 : ''),
-                std.genEnglishMarks ?? '', std.intake || '',
+                std.intake || '',
                 std.dateOfEnrolment ? new Date(std.dateOfEnrolment).toLocaleDateString() : '',
                 std.distance ?? '', (std.hostelName || (isStudentAssigned(std) ? 'Assigned' : 'Not Assigned'))
             ]
@@ -313,7 +312,7 @@ const AllStudents = () => {
         <div className="mt-8">
             <div className="mb-4 flex flex-wrap items-center gap-6">
                 <DefaultInput
-                    label="Search by NIC, Enrolment No, or Index No"
+                    label="Search by NIC or Enrolment No"
                     name="search"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
@@ -417,7 +416,7 @@ const AllStudents = () => {
                         <tr>
                             <th className="px-6 py-4">#</th>
                             <th className="px-6 py-4">Enrolment No</th>
-                            <th className="px-6 py-4">Index No</th>
+                            
                             <th className="px-6 py-4">NIC</th>
                             <th className="px-6 py-4">Gender</th>
                             <th className="px-6 py-4">Home Town</th>
@@ -434,7 +433,7 @@ const AllStudents = () => {
                                         {(currentPage - 1) * recordsPerPage + index + 1}
                                     </td>
                                     <td className="px-6 py-4">{data.enrolmentNo}</td>
-                                    <td className="px-6 py-4">{data.indexNo}</td>
+                                    
                                     <td className="px-6 py-4">{data.nic}</td>
                                     <td className="px-6 py-4">
                                         {data.sex === 'Male' ? (
@@ -474,7 +473,7 @@ const AllStudents = () => {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
+                                <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                                     No students found.
                                 </td>
                             </tr>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { FaUserCog } from 'react-icons/fa';
 import { FaGear, FaPowerOff } from 'react-icons/fa6';
 import { getUserInfoFromToken } from '../../utils/auth';
-import DashUser from '../../assets/DashUser.png'
+import DashUser from '../../assets/new_profilePic.jpg';
 
 const DashNav = () => {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -10,6 +10,10 @@ const DashNav = () => {
 
     const { username, roles } = getUserInfoFromToken() || {};
     const role = roles?.[0]?.name || '';
+    const roleNames = Array.isArray(roles)
+        ? roles.map(r => (typeof r === 'string' ? r : r?.name)).filter(Boolean)
+        : [typeof roles === 'string' ? roles : roles?.name].filter(Boolean);
+    const canSeeBackup = roleNames.some(r => r === 'admin' || r === 'director');
 
     // profile image state - read from localStorage or fallback to default
     const [profileImage, setProfileImage] = useState(() => {
@@ -115,14 +119,16 @@ const DashNav = () => {
                             <FaUserCog className="text-lg" />
                             Profile
                         </a>
-                        <a
-                            href="#"
-                            className="flex items-center gap-3 px-4 py-2 rounded-lg text-amber-700 hover:bg-amber-100 transition font-medium"
-                            role="menuitem"
-                        >
-                            <FaGear className="text-lg" />
-                            Settings
-                        </a>
+                        {canSeeBackup && (
+                            <a
+                                href="/Dashboard/BackupOptions"
+                                className="flex items-center gap-3 px-4 py-2 rounded-lg text-amber-700 hover:bg-amber-100 transition font-medium"
+                                role="menuitem"
+                            >
+                                <FaGear className="text-lg" />
+                                Backup Options
+                            </a>
+                        )}
                         <button
                             onClick={handleLogout}
                             className="w-full text-left flex items-center gap-3 px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 transition font-medium"

@@ -1,6 +1,11 @@
 import React from 'react'
 
-const Dropdown = ({ label, name, onChange, required = false, options = [] }) => {
+const Dropdown = ({ label, name, value, onChange, required = false, options = [] }) => {
+    const selectProps = {}
+    if (value !== undefined) {
+        selectProps.value = value
+    }
+
     return (
         <div className="mb-5">
             {label && (
@@ -13,6 +18,7 @@ const Dropdown = ({ label, name, onChange, required = false, options = [] }) => 
                 name={name}
                 onChange={onChange}
                 required={required}
+                {...selectProps}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-500 transition"
             >
                 <option value="">Select an option</option>

@@ -4,6 +4,7 @@ const SpecialNeeds = require("../model/SpecialNeeds");
 const Student = require("../model/Student");
 const User = require("../model/User");
 const Warden = require("../model/Warden");
+const { getActiveWardenAssignments, getActiveWardenHostelIds } = require('../utils/wardenAssignments');
 
 
 const RoomController = {
@@ -71,12 +72,13 @@ const RoomController = {
         try {
             const userId = req.user.id;
 
-            const warden = await Warden.findOne({ userId, active: true });
-            if (!warden) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.json({ rooms: [] });
             }
 
-            const rooms = await Room.find({ hostelID: warden.hostelId }).populate('students');
+            const rooms = await Room.find({ hostelID: { $in: hostelIds } }).populate('students').populate('hostelID');
 
             return res.json({ rooms });
         } catch (err) {

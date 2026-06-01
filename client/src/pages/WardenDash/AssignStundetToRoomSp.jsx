@@ -84,7 +84,7 @@ const AssignStundetToRoomSp = () => {
                 <h1 className="text-gray-500 font-bold text-2xl mb-4">Student Information</h1>
                 <div className="grid grid-cols-3 gap-4">
                     <Detail label="Student Email" value={getsdt?.email} />
-                    <Detail label="Student Index No" value={getsdt?.indexNo} />
+                    
                     <Detail label="Student NIC" value={getsdt?.nic} />
                     <Detail label="Student Enrolment No" value={getsdt?.enrolmentNo} />
                 </div>

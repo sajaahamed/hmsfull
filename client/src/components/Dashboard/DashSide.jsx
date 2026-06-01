@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getUserInfoFromToken } from '../../utils/auth';
 import { dashsidedata } from './DashSideData';
 import uoplogo from '../../assets/uoplogo.png';
-import DashUser from '../../assets/DashUser.png';
+import DashUser from '../../assets/new_profilePic.jpg';
 
 const DashSide = () => {
     const [activeMenu, setActiveMenu] = useState(null);
@@ -23,13 +23,17 @@ const DashSide = () => {
             return ![3, 5, 7, 12, 13, 14].includes(item.id); 
         }
         if (roleNames.includes('warden')) {
-            return ![2, 4, 6, 9, 10, 11, 12, 13, 16].includes(item.id); 
+            return ![2, 4, 6, 9, 10, 11, 12, 13, 16, 17].includes(item.id); 
         }
         if (roleNames.includes('student')) {
-            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16].includes(item.id); 
+            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17].includes(item.id); 
         }
         return false; // All others get no menu
     });
+
+    const profileItem = filteredMenu.find(item => item.id === 8);
+    const mainMenu = filteredMenu.filter(item => item.id !== 8);
+    const ProfileIcon = profileItem ? profileItem.icon : null;
 
     useEffect(() => {
         const currentItem = dashsidedata.find(item => item.link === location.pathname);
@@ -93,7 +97,7 @@ const DashSide = () => {
 
             <nav className="flex flex-col space-y-2 flex-grow">
                 {/* eslint-disable-next-line no-unused-vars */}
-                {filteredMenu.map(({ id, icon: Icon, name, link }) => (
+                {mainMenu.map(({ id, icon: Icon, name, link }) => (
                     <Link
                         to={link}
                         key={id}
@@ -118,6 +122,32 @@ const DashSide = () => {
                     </Link>
                 ))}
             </nav>
+
+            {profileItem && (
+                <div className="pt-4 mt-4 border-t" style={{ borderColor: 'rgba(212,175,55,0.2)' }}>
+                    <Link
+                        to={profileItem.link}
+                        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors text-sm
+                            ${activeMenu === profileItem.id
+                                ? 'text-white shadow-lg'
+                                : 'hover:text-white'
+                            }`}
+                        style={activeMenu === profileItem.id
+                            ? { background: 'linear-gradient(90deg, #d4af37, #c59a3a)' }
+                            : { color: 'rgba(255,255,255,0.75)', background: 'transparent' }
+                        }
+                        onClick={() => {
+                            setActiveMenu(profileItem.id);
+                            localStorage.setItem('dashmenuID', profileItem.id);
+                        }}
+                        tabIndex={0}
+                        aria-current={activeMenu === profileItem.id ? 'page' : undefined}
+                    >
+                        <span className="text-lg">{ProfileIcon && <ProfileIcon />}</span>
+                        <span className="font-semibold tracking-wide">{profileItem.name}</span>
+                    </Link>
+                </div>
+            )}
         </aside>
     );
 };

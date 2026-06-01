@@ -166,14 +166,9 @@ const UserController = {
             const user = await User.findById(id);
             if (!user) return res.status(404).json({ error: 'User not found' });
 
-            // If user has a warden record, remove it and clear hostel reference
-            const warden = await Warden.findOne({ userId: id });
-            if (warden) {
-                if (warden.hostelId) {
-                    await Hostel.findByIdAndUpdate(warden.hostelId, { $unset: { warden: "" } });
-                }
-                await Warden.findByIdAndDelete(warden._id);
-            }
+            // If user has warden records, remove them and clear hostel references
+            await Hostel.updateMany({ warden: id }, { $unset: { warden: "" } });
+            await Warden.deleteMany({ userId: id });
 
             await User.findByIdAndDelete(id);
             return res.json({ Status: 'Success', Message: 'User and related warden removed' });

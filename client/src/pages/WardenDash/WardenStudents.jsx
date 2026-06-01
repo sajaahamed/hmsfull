@@ -59,8 +59,7 @@ const WardenStudents = () => {
         const term = searchTerm.toLowerCase();
         return (
             student.nic?.toLowerCase().includes(term) ||
-            student.enrolmentNo?.toLowerCase().includes(term) ||
-            student.indexNo?.toLowerCase().includes(term)
+            student.enrolmentNo?.toLowerCase().includes(term)
         );
     });
 
@@ -136,11 +135,11 @@ const WardenStudents = () => {
             </div>
 
             <DefaultInput
-                label="Search by NIC, Enrolment No, or Index No"
+                label="Search by NIC or Enrolment No"
                 name="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Type NIC, Enrolment No or Index No"
+                placeholder="Type NIC or Enrolment No"
             />
 
             <div className="-mt-4 mb-4 flex">
@@ -169,7 +168,7 @@ const WardenStudents = () => {
                         <tr>
                             <th className="px-6 py-4 font-semibold">#</th>
                             <th className="px-6 py-4 font-semibold">Enrolment No</th>
-                            <th className="px-6 py-4 font-semibold">Index No</th>
+                            
                             <th className="px-6 py-4 font-semibold">NIC</th>
                             <th className="px-6 py-4 font-semibold">Gender</th>
                             <th className="px-6 py-4 font-semibold">Home Town</th>
@@ -193,7 +192,7 @@ const WardenStudents = () => {
                                         {(currentPage - 1) * recordsPerPage + idx + 1}
                                     </td>
                                     <td className="px-6 py-4">{student.enrolmentNo || '-'}</td>
-                                    <td className="px-6 py-4">{student.indexNo || '-'}</td>
+                                    
                                     <td className="px-6 py-4">{student.nic || '-'}</td>
                                     <td className="px-6 py-4">
                                         {gender === 'male' ? (

@@ -3,7 +3,7 @@ import { MdOutlineEdit } from "react-icons/md";
 import DefaultInput from '../../components/Form/DefaultInput';
 import FileInput from '../../components/Form/FileInput';
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
-import DashUser from '../../assets/DashUser.png';
+import DashUser from '../../assets/new_profilePic.jpg';
 import axios from 'axios';
 
 const Profile = () => {

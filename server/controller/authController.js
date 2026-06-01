@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken')
 const crypto = require('crypto');
 const Role = require('../model/Role');
 const User = require('../model/User');
+const Student = require('../model/Student');
 const transporter = require('../utils/emailTransporter');
 const UserOTP = require('../model/UserOTP');
 
@@ -159,17 +160,104 @@ const authController = {
 
     signin: async (req, res) => {
         try {
-            const {
-                email,
-                password
-            } = req.body
+            const { email, password, identifier, loginMode } = req.body;
+            const normalizedMode = String(loginMode || '').toLowerCase();
+            const normalizedIdentifier = String(identifier || '').trim();
+            const looksLikeStudentLogin = normalizedMode === 'student' || (normalizedIdentifier && !String(email || '').trim() && !normalizedIdentifier.includes('@'));
 
+            let checkuser = null;
 
-            const checkuser = await User.findOne({ email }).populate('roles');
+            const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const findStudentByEnrollment = async (enrolmentNo) => {
+                const trimmed = String(enrolmentNo || '').trim();
+                if (!trimmed) return null;
+                const flexiblePattern = new RegExp(`^\\s*${escapeRegex(trimmed)}\\s*$`, 'i');
 
+                return Student.findOne({
+                    $or: [
+                        { enrolmentNo: trimmed },
+                        { enrolmentNo: trimmed.toUpperCase() },
+                        { enrolmentNo: trimmed.toLowerCase() },
+                        { enrolmentNo: { $regex: flexiblePattern } },
+                        { enrolmentNo: { $regex: trimmed, $options: 'i' } },
+                        { no: trimmed }
+                    ]
+                });
+            };
 
-            if (!checkuser) {
-                return res.json({ Error: "The User not Found by Given Email Address" })
+            if (looksLikeStudentLogin) {
+                const enrolmentNo = normalizedIdentifier;
+                if (!enrolmentNo) {
+                    return res.json({ Error: "Enrolment number is required for student login" });
+                }
+
+                const student = await findStudentByEnrollment(enrolmentNo);
+                if (!student) {
+                    return res.json({ Error: "Student not found for given enrolment number" });
+                }
+
+                checkuser = await User.findOne({
+                    $or: [
+                        { email: student.email },
+                        { username: student.nic }
+                    ]
+                }).populate('roles');
+
+                if (!checkuser) {
+                    const studentRole = await Role.findOne({ name: 'student' });
+                    if (!studentRole) {
+                        return res.json({ Error: "Student role not found" });
+                    }
+
+                    const fallbackUsername = String(enrolmentNo || student.enrolmentNo || student.nic || student.no || '').trim();
+                    if (!fallbackUsername) {
+                        return res.json({ Error: "Student username cannot be determined" });
+                    }
+
+                    const studentEmail = String(student.email || '').trim();
+                    if (!studentEmail) {
+                        return res.json({ Error: "Student email is missing" });
+                    }
+
+                    const hashedPassword = await bcrypt.hash('12345678', 10);
+                    const newStudentUser = new User({
+                        username: fallbackUsername,
+                        email: studentEmail,
+                        emailVerified: true,
+                        active: true,
+                        password: hashedPassword,
+                        roles: [studentRole._id],
+                    });
+
+                    checkuser = await newStudentUser.save();
+                    checkuser = await User.findById(checkuser._id).populate('roles');
+                }
+
+                if (!checkuser) {
+                    return res.json({ Error: "Student account not found" });
+                }
+            } else {
+                const loginEmail = String(email || '').trim();
+                if (!loginEmail) {
+                    return res.json({ Error: "Email is required for staff login" });
+                }
+
+                checkuser = await User.findOne({ email: loginEmail }).populate('roles');
+
+                if (!checkuser) {
+                    return res.json({ Error: "The User not Found by Given Email Address" })
+                }
+            }
+
+            const roleNames = (checkuser.roles || []).map(role => String(role.name || '').toLowerCase());
+            const isStudentAccount = roleNames.includes('student');
+
+            if (isStudentAccount && !looksLikeStudentLogin) {
+                return res.json({ Error: "Student accounts must log in with Enrolment No" });
+            }
+
+            if (!isStudentAccount && looksLikeStudentLogin) {
+                return res.json({ Error: "Only student accounts can use Enrolment No login" });
             }
 
             if (checkuser.emailVerified === false) {

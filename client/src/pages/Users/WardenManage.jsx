@@ -252,12 +252,18 @@ const WardenManage = () => {
     const userOptions = users.map(u => ({ value: u._id, label: u.username }))
     const hostelOptions = hostels.map(h => ({ value: h._id, label: `${h.name} (${h.gender})` }))
 
-    // Users who have the 'warden' role but no Warden record yet
-    const assignedUserIds = wardens.map(w => w.userId?._id).filter(Boolean)
+    const assignmentCounts = wardens.reduce((counts, warden) => {
+        const userId = warden.userId?._id?.toString?.() || warden.userId?.toString?.()
+        if (!userId) return counts
+        counts[userId] = (counts[userId] || 0) + 1
+        return counts
+    }, {})
+
+    // Users who have the 'warden' role and fewer than two hostel assignments
     const unassignedWardenUsers = users.filter(u => {
         const hasWardenRole = Array.isArray(u.roles) && u.roles.some(r => r.name === 'warden')
-        const alreadyAssigned = assignedUserIds.includes(u._id)
-        return hasWardenRole && !alreadyAssigned
+        const userId = u._id?.toString?.() || String(u._id)
+        return hasWardenRole && (assignmentCounts[userId] || 0) < 2
     })
 
     return (
@@ -454,7 +460,7 @@ const WardenManage = () => {
             {/* Unassigned users with warden role */}
             {unassignedWardenUsers.length > 0 && (
                 <div className="mt-6">
-                    <h2 className="text-lg font-semibold mb-3">Unassigned Wardens (users with `warden` role)</h2>
+                    <h2 className="text-lg font-semibold mb-3">Available Wardens (users with `warden` role and fewer than two hostels)</h2>
                     <div className="overflow-x-auto rounded-2xl shadow-lg">
                         <table className="min-w-full text-sm text-left text-gray-600 bg-white">
                             <thead className="text-xs uppercase bg-[#f8f7f4] text-[#6b0f14]">

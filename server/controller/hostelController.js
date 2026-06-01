@@ -8,6 +8,7 @@ const Student = require("../model/Student")
 const { jwtDecode } = require('jwt-decode');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
+const { getActiveWardenAssignments, getActiveWardenHostelIds } = require('../utils/wardenAssignments');
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
@@ -49,10 +50,18 @@ const HostelController = {
                 .select("-password")
                 .populate("roles", "name");
 
-            const assignedWardenUserIds = await Warden.find({}).distinct("userId");
+            const activeAssignments = await Warden.find({ active: true }).select('userId');
+            const assignmentCounts = new Map();
+
+            for (const assignment of activeAssignments) {
+                const userId = assignment.userId?.toString();
+                if (!userId) continue;
+                assignmentCounts.set(userId, (assignmentCounts.get(userId) || 0) + 1);
+            }
 
             const unassignedWardens = allWardenUsers.filter(user => {
-                return !assignedWardenUserIds.some(id => id.equals(user._id));
+                const userId = user._id.toString();
+                return (assignmentCounts.get(userId) || 0) < 2;
             });
 
             return res.json({ result: unassignedWardens });
@@ -87,6 +96,13 @@ const HostelController = {
             const parsedRoomCount = parseInt(roomCount);
             if (isNaN(parsedRoomCount) || parsedRoomCount <= 0) {
                 return res.json({ error: "Invalid room count" });
+            }
+
+            if (warden) {
+                const activeAssignments = await Warden.countDocuments({ userId: warden, active: true });
+                if (activeAssignments >= 2) {
+                    return res.json({ error: "This warden already manages two hostels" });
+                }
             }
 
             // Create and save hostel
@@ -345,20 +361,23 @@ const HostelController = {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
 
-            const wardenRecord = await Warden.findOne({ userId }).populate('hostelId', 'hostelID name gender');
-            if (!wardenRecord || !wardenRecord.hostelId) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.status(403).json({ message: 'Warden hostel not found' });
             }
 
+            const hostels = assignments.map(assignment => normalizeHostel(assignment.hostelId)).filter(Boolean);
+
             const allocations = await Allocation.find({
-                hostelID: wardenRecord.hostelId._id,
+                hostelID: { $in: hostelIds },
                 active: true,
             })
                 .populate('roomId')
                 .populate('hostelID', 'hostelID name gender');
 
             if (!allocations.length) {
-                return res.json({ Result: [], hostel: normalizeHostel(wardenRecord.hostelId) });
+                return res.json({ Result: [], hostel: hostels[0] || null, hostels });
             }
 
             const objectIds = new Set();
@@ -453,7 +472,8 @@ const HostelController = {
 
             return res.json({
                 Result: result,
-                hostel: normalizeHostel(wardenRecord.hostelId)
+                hostel: hostels[0] || null,
+                hostels,
             });
 
         } catch (err) {

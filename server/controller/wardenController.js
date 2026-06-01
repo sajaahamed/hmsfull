@@ -10,6 +10,7 @@ const { jwtDecode } = require('jwt-decode');
 const { getoneHostel } = require("./hostelController");
 const Hostel = require("../model/Hostel");
 const Room = require("../model/Room");
+const { getActiveWardenAssignments, getActiveWardenHostelIds } = require('../utils/wardenAssignments');
 
 const WardenController = {
     getstdextraneeds: async (req, res) => {
@@ -19,15 +20,15 @@ const WardenController = {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
 
-            // Find warden record and hostel
-            const wardenRecord = await Warden.findOne({ userId }).populate('hostelId');
-            if (!wardenRecord || !wardenRecord.hostelId) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.status(404).json({ message: 'Warden record not found' });
             }
 
-            // Get allocated students in warden's hostel.
+            // Get allocated students in all hostel(s) managed by the warden.
             // NOTE: Allocation.studentId is the intended field, but some datasets store the student ObjectId in Allocation.regNo.
-            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId._id, active: true })
+            const allocations = await Allocation.find({ hostelID: { $in: hostelIds }, active: true })
                 .select('studentId regNo')
                 .lean();
 
@@ -85,12 +86,13 @@ const WardenController = {
                 return res.status(404).json({ Status: 'Fail', Error: 'SpecialNeed not found' });
             }
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord || !wardenRecord.hostelId) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.status(403).json({ Status: 'Fail', Error: 'Warden hostel not found' });
             }
 
-            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId, active: true })
+            const allocations = await Allocation.find({ hostelID: { $in: hostelIds }, active: true })
                 .select('studentId regNo')
                 .lean();
 
@@ -153,12 +155,13 @@ const WardenController = {
                 return res.status(404).json({ Status: 'Fail', Error: 'SpecialNeed not found' });
             }
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord || !wardenRecord.hostelId) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.status(403).json({ Status: 'Fail', Error: 'Warden hostel not found' });
             }
 
-            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId, active: true })
+            const allocations = await Allocation.find({ hostelID: { $in: hostelIds }, active: true })
                 .select('studentId regNo')
                 .lean();
 
@@ -214,10 +217,11 @@ const WardenController = {
             const getwardendata = await User.findOne({ email });
             if (!getwardendata) return res.json({ message: 'Warden not found' });
 
-            const gethostel = await Hostel.findOne({ warden: getwardendata._id });
-            if (!gethostel) return res.json({ message: 'Hostel not assigned to this warden' });
+            const gethostels = await Hostel.find({ warden: getwardendata._id });
+            if (!gethostels.length) return res.json({ message: 'Hostel not assigned to this warden' });
 
-            const rooms = await Room.find({ hostelID: gethostel._id });
+            const hostelIds = gethostels.map(hostel => hostel._id);
+            const rooms = await Room.find({ hostelID: { $in: hostelIds } });
 
             // console.log(rooms)
 
@@ -291,13 +295,14 @@ const WardenController = {
                 return res.status(401).json({ Error: 'Unauthorized' });
             }
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord || !wardenRecord.hostelId) {
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) {
                 return res.status(403).json({ Error: 'Warden hostel not found' });
             }
 
             const getallstds = await Allocation.find({
-                hostelID: wardenRecord.hostelId,
+                hostelID: { $in: hostelIds },
                 active: true
             })
                 .populate('regNo')
@@ -315,11 +320,20 @@ const WardenController = {
     unassign_student: async (req, res) => {
         try {
             const { id } = req.params; // allocation id
+            const userId = req.user?.id;
 
             if (!id) return res.json({ Error: 'Allocation id required' });
 
             const allocation = await Allocation.findById(id);
             if (!allocation) return res.json({ Error: 'Allocation not found' });
+
+            if (userId) {
+                const assignments = await getActiveWardenAssignments(userId);
+                const hostelIds = getActiveWardenHostelIds(assignments);
+                if (hostelIds.length && !hostelIds.includes(allocation.hostelID?.toString())) {
+                    return res.status(403).json({ Error: 'Forbidden' });
+                }
+            }
 
             const regNo = allocation.regNo;
             const roomId = allocation.roomId;
@@ -373,6 +387,10 @@ const WardenController = {
     assign_students_room: async (req, res) => {
         try {
             const selectedStudentIds = req.body; // Array of Student IDs
+            const userId = req.user?.id;
+
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
 
             if (!Array.isArray(selectedStudentIds) || selectedStudentIds.length === 0) {
                 return res.json({ Error: 'No student IDs provided' });
@@ -385,6 +403,11 @@ const WardenController = {
                 const allocation = await Allocation.findOne({ regNo: studentId });
                 if (!allocation) {
                     console.log(`No allocation found for student: ${studentId}`);
+                    continue;
+                }
+
+                if (hostelIds.length && !hostelIds.includes(allocation.hostelID?.toString())) {
+                    console.log(`Student ${studentId} is not in an assigned hostel`);
                     continue;
                 }
 
@@ -440,6 +463,7 @@ const WardenController = {
     assign_students_to_room_specific: async (req, res) => {
         try {
             const { studentIds, roomId } = req.body;
+            const userId = req.user?.id;
 
             if (!Array.isArray(studentIds) || studentIds.length === 0) {
                 return res.json({ Error: 'No student IDs provided' });
@@ -451,6 +475,12 @@ const WardenController = {
 
             const room = await Room.findById(roomId);
             if (!room) return res.json({ Error: 'Room not found' });
+
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (hostelIds.length && !hostelIds.includes(room.hostelID?.toString())) {
+                return res.status(403).json({ Error: 'Forbidden' });
+            }
 
             const capacity = room.capasity || 0;
             const available = capacity - (room.currentOccupants || 0);
@@ -563,10 +593,17 @@ const WardenController = {
                 return res.json({ Error: 'Hostel not found' });
             }
 
-            // Check if user already assigned to a warden
-            const existingWarden = await Warden.findOne({ userId });
-            if (existingWarden) {
-                return res.json({ Error: 'User is already assigned as a warden' });
+            const existingAssignments = await Warden.find({ userId, active: true });
+            const alreadyAssignedToHostel = existingAssignments.some(assignment =>
+                assignment.hostelId && assignment.hostelId.toString() === hostelId.toString()
+            );
+
+            if (alreadyAssignedToHostel) {
+                return res.json({ Error: 'User is already assigned to this hostel' });
+            }
+
+            if (existingAssignments.length >= 2) {
+                return res.json({ Error: 'User can manage at most two hostels' });
             }
 
             // Create new warden
@@ -608,6 +645,16 @@ const WardenController = {
                 const hostel = await Hostel.findById(hostelId);
                 if (!hostel) {
                     return res.json({ Error: 'Hostel not found' });
+                }
+
+                const otherAssignments = await Warden.countDocuments({
+                    userId: warden.userId,
+                    active: true,
+                    _id: { $ne: warden._id }
+                });
+
+                if (otherAssignments >= 2) {
+                    return res.json({ Error: 'User can manage at most two hostels' });
                 }
                 
                 // Update hostel references
@@ -668,8 +715,9 @@ const WardenController = {
             const userId = req.user?.id;
             if (!userId) return res.status(401).json({ Error: 'Unauthorized' });
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord) return res.status(403).json({ Error: 'Warden record not found' });
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) return res.status(403).json({ Error: 'Warden record not found' });
 
             // Find allocation for the student (regNo may be studentId or student object id stored in regNo)
             const allocation = await Allocation.findOne({
@@ -682,7 +730,7 @@ const WardenController = {
             if (!allocation) return res.status(404).json({ Error: 'Allocation not found for student' });
 
             // Ensure student belongs to the warden's hostel
-            if (!allocation.hostelID || allocation.hostelID.toString() !== wardenRecord.hostelId.toString()) {
+            if (!allocation.hostelID || !hostelIds.includes(allocation.hostelID.toString())) {
                 return res.status(403).json({ Error: 'Student is not in your hostel' });
             }
 
@@ -710,12 +758,13 @@ const WardenController = {
             const userId = req.user?.id;
             if (!userId) return res.status(401).json({ Error: 'Unauthorized' });
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord) return res.status(403).json({ Error: 'Warden record not found' });
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) return res.status(403).json({ Error: 'Warden record not found' });
 
             // Get allocations for the hostel
-            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId });
-            console.log(`DEBUG: Found ${allocations.length} allocations for hostel ${wardenRecord.hostelId}`);
+            const allocations = await Allocation.find({ hostelID: { $in: hostelIds } });
+            console.log(`DEBUG: Found ${allocations.length} allocations for hostel(s) ${hostelIds.join(', ')}`);
 
             // Collect student ObjectIds from allocations (if stored) and regNos otherwise.
             // NOTE: Some legacy data stores Student _id (24-hex) as a string in Allocation.regNo.
@@ -821,11 +870,12 @@ const WardenController = {
             const userId = req.user?.id;
             if (!userId) return res.status(401).json({ Error: 'Unauthorized' });
 
-            const wardenRecord = await Warden.findOne({ userId });
-            if (!wardenRecord) return res.status(403).json({ Error: 'Warden record not found' });
+            const assignments = await getActiveWardenAssignments(userId);
+            const hostelIds = getActiveWardenHostelIds(assignments);
+            if (!hostelIds.length) return res.status(403).json({ Error: 'Warden record not found' });
 
             // Get allocations for the hostel
-            const allocations = await Allocation.find({ hostelID: wardenRecord.hostelId });
+            const allocations = await Allocation.find({ hostelID: { $in: hostelIds } });
 
             // Collect student ObjectIds from allocations (if stored) and regNos otherwise.
             // NOTE: Some legacy data stores Student _id (24-hex) as a string in Allocation.regNo.

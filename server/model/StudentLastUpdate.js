@@ -1,9 +1,8 @@
 const mongoose = require('mongoose');
 
-const StudentSchema = new mongoose.Schema({
+const StudentLastUpdateSchema = new mongoose.Schema({
     no: String,
     enrolmentNo: { type: String },
-    indexNo: String,
     name: String,
     title: String,
     lastName: String,
@@ -11,7 +10,6 @@ const StudentSchema = new mongoose.Schema({
     fullName: String,
     alDistrict: String,
     sex: String,
-    zScore: Number,
     medium: String,
     nic: String,
     address1: String,
@@ -21,11 +19,10 @@ const StudentSchema = new mongoose.Schema({
     email: String,
     phone1: String,
     phone2: String,
-    genEnglishMarks: Number,
     intake: String,
     dateOfEnrolment: Date,
     distance: Number,
     lastupdateAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Student', StudentSchema);
+module.exports = mongoose.model('StudentLastUpdate', StudentLastUpdateSchema);

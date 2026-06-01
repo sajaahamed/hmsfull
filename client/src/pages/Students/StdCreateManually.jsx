@@ -15,7 +15,6 @@ const StdCreateManually = () => {
 
     const [studentData, setStudentData] = useState({
         enrolmentNo: '',
-        indexNo: '',
         name: '',
         title: '',
         lastName: '',
@@ -23,7 +22,6 @@ const StdCreateManually = () => {
         fullName: '',
         alDistrict: '',
         sex: '',
-        zScore: '',
         medium: '',
         nic: '',
         address1: '',
@@ -33,7 +31,6 @@ const StdCreateManually = () => {
         email: '',
         phone1: '',
         phone2: '',
-        genEnglishMarks: '',
         intake: '',
         dateOfEnrolment: '',
         distance: ''
@@ -75,7 +72,6 @@ const StdCreateManually = () => {
             <form onSubmit={handleCreateStudent}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <DefaultInput label="Enrolment No" name="enrolmentNo" value={studentData.enrolmentNo} onChange={handleInputChange} required />
-                    <DefaultInput label="Index No" name="indexNo" value={studentData.indexNo} onChange={handleInputChange} required />
                     <DefaultInput label="Name" name="name" value={studentData.name} onChange={handleInputChange} />
                     <DefaultInput label="Title" name="title" value={studentData.title} onChange={handleInputChange} />
                     <DefaultInput label="Last Name" name="lastName" value={studentData.lastName} onChange={handleInputChange} />
@@ -93,13 +89,11 @@ const StdCreateManually = () => {
                         ]}
                         required
                     />
-                    <DefaultInput label="Z-Score" name="zScore" value={studentData.zScore} onChange={handleInputChange} />
                     <DefaultInput label="Medium" name="medium" value={studentData.medium} onChange={handleInputChange} />
                     <DefaultInput label="NIC" name="nic" value={studentData.nic} onChange={handleInputChange} required />
                     <DefaultInput label="Phone 1" name="phone1" value={studentData.phone1} onChange={handleInputChange} />
                     <DefaultInput label="Phone 2" name="phone2" value={studentData.phone2} onChange={handleInputChange} />
                     <DefaultInput label="Email" name="email" value={studentData.email} onChange={handleInputChange} />
-                    <DefaultInput label="General English Marks" name="genEnglishMarks" value={studentData.genEnglishMarks} onChange={handleInputChange} />
                     <DefaultInput label="Intake" name="intake" value={studentData.intake} onChange={handleInputChange} />
                     <DefaultInput label="Distance" name="distance" value={studentData.distance} onChange={handleInputChange} />
                     <DateInput label="Date of Enrolment" name="dateOfEnrolment" value={studentData.dateOfEnrolment} onChange={handleInputChange} />

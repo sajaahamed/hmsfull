@@ -298,7 +298,7 @@ const StudentController = {
                 const get = (k) => norm[k.replace(/\W/g, '').toLowerCase()];
 
                 // Determine a unique identifier for the row. If none exists, skip the row
-                const idField = get('Enrolment_No.') || get('enrolmentNo') || get('enrolmentno') || get('index_no') || get('indexno') || get('nic') || get('email');
+                const idField = get('Enrolment_No.') || get('enrolmentNo') || get('enrolmentno') || get('nic') || get('email');
                 if (!idField) {
                     // No reliable unique id -> skip this row
                     duplicateStudents.push(null);
@@ -308,7 +308,6 @@ const StudentController = {
                 const exists = await Student.findOne({
                     $or: [
                         { enrolmentNo: get('Enrolment_No.') || get('enrolmentno') },
-                        { indexNo: get('Index_No') || get('indexno') },
                         { nic: get('NIC') },
                         { email: get('email') }
                     ]
@@ -321,7 +320,6 @@ const StudentController = {
 
                 const studentData = {
                     no: get('No'),
-                    indexNo: get('Index_No') || get('indexno'),
                     name: get('Name'),
                     title: get('Title'),
                     lastName: get('L_Name') || get('lname'),
@@ -329,7 +327,6 @@ const StudentController = {
                     fullName: get('Full_Name') || get('fullname'),
                     alDistrict: get('alDistrict') || get('aldistrict'),
                     sex: normalizeGender(get('Sex') ?? get('Gender')),
-                    zScore: isNaN(parseFloat(get('Z_Score'))) ? 0 : parseFloat(get('Z_Score')),
                     medium: get('Medium'),
                     nic: get('NIC'),
                     address1: get('ADD1') || get('add1'),
@@ -339,7 +336,6 @@ const StudentController = {
                     email: get('email'),
                     phone1: get('Phone_No') || get('phoneno') || get('phone_no'),
                     phone2: get('Phone_No_2') || get('phone_no_2') || '',
-                    genEnglishMarks: get('Gen_English_Marks') ? parseInt(get('Gen_English_Marks')) : null,
                     intake: get('Intake'),
                     dateOfEnrolment: get('Date_of_Enollment') || get('dateofenrolment') || get('dateofenrollment'),
                     distance: null
@@ -373,7 +369,7 @@ const StudentController = {
                 console.log('[createstdviaSheet] total rows in sheet:', studentsFromExcel.length);
                 console.log('[createstdviaSheet] prepared documents for insert:', insertedStudents.length);
                 console.log('[createstdviaSheet] skipped/duplicate candidates so far:', duplicateStudents.length);
-                console.log('[createstdviaSheet] sample prepared docs:', insertedStudents.slice(0, 5).map(d => ({ enrolmentNo: d.enrolmentNo || null, indexNo: d.indexNo || null, email: d.email || null })));
+                console.log('[createstdviaSheet] sample prepared docs:', insertedStudents.slice(0, 5).map(d => ({ enrolmentNo: d.enrolmentNo || null, email: d.email || null })));
                 const ops = insertedStudents.map(doc => ({ insertOne: { document: doc } }));
                 try {
                     const bulkRes = await Student.bulkWrite(ops, { ordered: false });
@@ -394,7 +390,7 @@ const StudentController = {
                         for (const we of err.writeErrors) {
                             const idx = we.index;
                             const doc = insertedStudents[idx];
-                            const id = (doc && (doc.enrolmentNo || doc.indexNo || doc.email || doc.nic)) || null;
+                            const id = (doc && (doc.enrolmentNo || doc.email || doc.nic)) || null;
                             duplicateStudents.push(id);
                         }
                     }
@@ -431,7 +427,7 @@ const StudentController = {
             const results = [];
             for (const r of rows) {
                 const address = r['Address'] || r['fullAddress'] || r['HomeAddress'] || r['ADD3'] || r['ADD1'] || r['Address1'];
-                const idField = r['Enrolment_No.'] || r['enrolmentNo'] || r['email'] || r['Index_No'];
+                const idField = r['Enrolment_No.'] || r['enrolmentNo'] || r['email'];
 
                 if (!address) {
                     results.push({ id: idField || null, status: 'Skipped', reason: 'No address found in row' });
@@ -468,11 +464,10 @@ const StudentController = {
                     if (idField) {
                         const query = {
                             $or: [
-                                { enrolmentNo: idField },
-                                { indexNo: idField },
-                                { email: idField },
-                                { nic: idField }
-                            ]
+                                        { enrolmentNo: idField },
+                                        { email: idField },
+                                        { nic: idField }
+                                    ]
                         };
                         updated = await Student.findOneAndUpdate(query, { distance: distanceKm }, { new: true });
                     }
@@ -515,7 +510,7 @@ const StudentController = {
             const results = [];
             for (const r of rows) {
                 const address = r['Address'] || r['fullAddress'] || r['HomeAddress'] || r['ADD3'] || r['ADD1'] || r['Address1'];
-                const idField = r['Enrolment_No.'] || r['enrolmentNo'] || r['email'] || r['Index_No'];
+                const idField = r['Enrolment_No.'] || r['enrolmentNo'] || r['email'];
 
                 if (!address) {
                     results.push({ id: idField || null, status: 'Skipped', reason: 'No address found in row' });
@@ -552,11 +547,10 @@ const StudentController = {
                     if (idField) {
                         const query = {
                             $or: [
-                                { enrolmentNo: idField },
-                                { indexNo: idField },
-                                { email: idField },
-                                { nic: idField }
-                            ]
+                                    { enrolmentNo: idField },
+                                    { email: idField },
+                                    { nic: idField }
+                                ]
                         };
                         updated = await Student.findOneAndUpdate(query, { distance: distanceKm }, { new: true });
                     }
@@ -581,7 +575,6 @@ const StudentController = {
         try {
             const {
                 enrolmentNo,
-                indexNo,
                 name,
                 title,
                 lastName,
@@ -589,7 +582,6 @@ const StudentController = {
                 fullName,
                 alDistrict,
                 sex,
-                zScore,
                 medium,
                 nic,
                 address1,
@@ -599,7 +591,6 @@ const StudentController = {
                 email,
                 phone1,
                 phone2,
-                genEnglishMarks,
                 intake,
                 dateOfEnrolment,
                 distance
@@ -609,14 +600,13 @@ const StudentController = {
             const existingStudent = await Student.findOne({
                 $or: [
                     { enrolmentNo },
-                    { indexNo },
                     { nic },
                     { email }
                 ]
             });
 
             if (existingStudent) {
-                return res.json({ error: "Student already exists with the provided enrolment number, index number, NIC, or email." });
+                return res.json({ error: "Student already exists with the provided enrolment number, NIC, or email." });
             }
 
             // Auto-calculate distance from address if not provided
@@ -633,7 +623,6 @@ const StudentController = {
 
             const newStudent = new Student({
                 enrolmentNo,
-                indexNo,
                 name,
                 title,
                 lastName,
@@ -641,7 +630,6 @@ const StudentController = {
                 fullName,
                 alDistrict,
                 sex: normalizeGender(sex),
-                zScore,
                 medium,
                 nic,
                 address1,
@@ -651,7 +639,6 @@ const StudentController = {
                 email,
                 phone1,
                 phone2,
-                genEnglishMarks,
                 intake,
                 dateOfEnrolment,
                 distance: computedDistance
@@ -838,7 +825,6 @@ const StudentController = {
                 fullName,
                 alDistrict,
                 sex,
-                zScore,
                 medium,
                 address1,
                 address2,
@@ -846,7 +832,6 @@ const StudentController = {
                 fullAddress,
                 phone1,
                 phone2,
-                genEnglishMarks,
                 intake,
                 dateOfEnrolment,
                 distance
@@ -877,7 +862,6 @@ const StudentController = {
                     fullName,
                     alDistrict,
                     sex: normalizeGender(sex),
-                    zScore,
                     medium,
                     address1,
                     address2,
@@ -885,7 +869,6 @@ const StudentController = {
                     fullAddress,
                     phone1,
                     phone2,
-                    genEnglishMarks,
                     intake,
                     dateOfEnrolment,
                     distance: computedDistance

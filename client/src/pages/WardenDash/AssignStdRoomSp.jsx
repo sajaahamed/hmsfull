@@ -51,19 +51,18 @@ const AssignStdRoomSp = () => {
                     <table className="min-w-full text-sm text-left text-gray-600 bg-white">
                         <thead className="text-xs uppercase bg-[#fdf6e3] text-[#6b0f14]">
                             <tr>
-                                <th className="px-6 py-4 font-semibold">#</th>
-                                <th className="px-6 py-4 font-semibold">Enrolment No</th>
-                                <th className="px-6 py-4 font-semibold">Index No</th>
-                                <th className="px-6 py-4 font-semibold">NIC</th>
-                                <th className="px-6 py-4 font-semibold">Gender</th>
-                                <th className="px-6 py-4 font-semibold">Email</th>
-                                <th className="px-6 py-4 font-semibold">Action</th>
-                            </tr>
+                                    <th className="px-6 py-4 font-semibold">#</th>
+                                    <th className="px-6 py-4 font-semibold">Enrolment No</th>
+                                    <th className="px-6 py-4 font-semibold">NIC</th>
+                                    <th className="px-6 py-4 font-semibold">Gender</th>
+                                    <th className="px-6 py-4 font-semibold">Email</th>
+                                    <th className="px-6 py-4 font-semibold">Action</th>
+                                </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {approvedstds.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-4">
+                                    <td colSpan={6} className="text-center py-4">
                                         No approved students found.
                                     </td>
                                 </tr>
@@ -72,7 +71,6 @@ const AssignStdRoomSp = () => {
                                     <tr key={student._id || student.regNo || index}>
                                         <td className="px-6 py-3">{index + 1}</td>
                                         <td className="px-6 py-3">{student.regNo?.enrolmentNo || '-'}</td>
-                                        <td className="px-6 py-3">{student.regNo?.indexNo || '-'}</td>
                                         <td className="px-6 py-3">{student.regNo?.nic || '-'}</td>
                                         <td className="px-6 py-3 capitalize">{student.regNo?.sex || '-'}</td>
                                         <td className="px-6 py-3">{student.regNo?.email || '-'}</td>

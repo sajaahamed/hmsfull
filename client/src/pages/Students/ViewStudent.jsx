@@ -85,7 +85,6 @@ const ViewStudent = () => {
             {!isEditing ? (
                 <div className="grid md:grid-cols-3 gap-4 text-sm">
                     <Detail label="Enrolment No" value={stdData.enrolmentNo} />
-                    <Detail label="Index No" value={stdData.indexNo} />
                     <Detail label="NIC" value={stdData.nic} />
                     <Detail label="Name" value={stdData.name} />
                     <Detail label="Title" value={stdData.title} />
@@ -94,7 +93,7 @@ const ViewStudent = () => {
                     <Detail label="Full Name" value={stdData.fullName} />
                     <Detail label="AL District" value={stdData.alDistrict} />
                     <Detail label="Sex" value={stdData.sex} />
-                    <Detail label="Z-Score" value={stdData.zScore} />
+                    
                     <Detail label="Medium" value={stdData.medium} />
                     <Detail label="Address 1" value={stdData.address1} />
                     <Detail label="Address 2" value={stdData.address2} />
@@ -103,7 +102,6 @@ const ViewStudent = () => {
                     <Detail label="Email" value={stdData.email} />
                     <Detail label="Phone 1" value={stdData.phone1} />
                     <Detail label="Phone 2" value={stdData.phone2} />
-                    <Detail label="General English Marks" value={stdData.genEnglishMarks} />
                     <Detail label="Intake" value={stdData.intake} />
                     <Detail label="Date of Enrolment" value={new Date(stdData.dateOfEnrolment).toLocaleDateString()} />
                     <Detail label="Distance" value={stdData.distance + ' km'} />
@@ -118,7 +116,7 @@ const ViewStudent = () => {
                         { name: 'initials', label: 'Initials' },
                         { name: 'fullName', label: 'Full Name' },
                         { name: 'alDistrict', label: 'AL District' },
-                        { name: 'zScore', label: 'Z-Score', type: 'number' },
+                        
                         { name: 'medium', label: 'Medium' },
                         { name: 'address1', label: 'Address 1' },
                         { name: 'address2', label: 'Address 2' },
@@ -126,7 +124,7 @@ const ViewStudent = () => {
                         { name: 'fullAddress', label: 'Full Address' },
                         { name: 'phone1', label: 'Phone 1' },
                         { name: 'phone2', label: 'Phone 2' },
-                        { name: 'genEnglishMarks', label: 'General English Marks', type: 'number' },
+                        
                         { name: 'intake', label: 'Intake' },
                         { name: 'dateOfEnrolment', label: 'Date of Enrolment', type: 'date' },
                         { name: 'distance', label: 'Distance (km)', type: 'number' }

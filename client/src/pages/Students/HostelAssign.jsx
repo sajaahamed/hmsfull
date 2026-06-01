@@ -70,7 +70,6 @@ const HostelAssign = () => {
             const searchTerm = filters.search.toLowerCase()
             filtered = filtered.filter(student =>
                 (student.enrolmentNo?.toLowerCase().includes(searchTerm) ||
-                    student.indexNo?.toLowerCase().includes(searchTerm) ||
                     student.nic?.toLowerCase().includes(searchTerm))
             )
         }
@@ -211,11 +210,11 @@ const HostelAssign = () => {
             <div className="flex flex-nowrap gap-4 mt-4 max-w-4xl overflow-x-auto no-scrollbar">
                 <div className="flex-grow min-w-[250px]">
                     <DefaultInput
-                        label="Search Enrolment No / Index No / NIC"
+                        label="Search Enrolment No / NIC"
                         name="search"
                         value={filters.search}
                         onChange={handleFilterChange}
-                        placeholder="Enter enrolment, index or NIC"
+                        placeholder="Enter enrolment or NIC"
                     />
                 </div>
 
@@ -305,7 +304,7 @@ const HostelAssign = () => {
                             <th className="px-3 sm:px-6 py-3 font-semibold">Select</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">#</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">Enrolment No</th>
-                            <th className="hidden sm:table-cell px-6 py-3 font-semibold">Index No</th>
+                            
                             <th className="hidden md:table-cell px-6 py-3 font-semibold">NIC</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">Gender</th>
                             <th className="hidden md:table-cell px-6 py-3 font-semibold">Home Town</th>
@@ -341,7 +340,7 @@ const HostelAssign = () => {
                                             </td>
                                             <td className="px-3 sm:px-6 py-3 font-medium text-gray-800">{index + 1}</td>
                                             <td className="px-3 sm:px-6 py-3 truncate">{data.enrolmentNo}</td>
-                                            <td className="hidden sm:table-cell px-6 py-3 truncate">{data.indexNo}</td>
+                                            
                                             <td className="hidden md:table-cell px-6 py-3 truncate">{data.nic}</td>
                                             <td className="px-3 sm:px-6 py-3">
                                                 {data.sex === 'Male' ? (
@@ -368,7 +367,7 @@ const HostelAssign = () => {
                                     ))
                             ) : (
                                 <tr>
-                                    <td colSpan="10" className="px-6 py-4 text-center text-gray-500">No matching records found.</td>
+                                    <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No matching records found.</td>
                                 </tr>
                             )
                         }

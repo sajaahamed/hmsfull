@@ -239,7 +239,6 @@ const AlreadyAssigned = () => {
             if (term) {
                 const matches = (student?.email || '').toLowerCase().includes(term) ||
                     (student?.enrolmentNo || '').toLowerCase().includes(term) ||
-                    (student?.indexNo || '').toLowerCase().includes(term) ||
                     (student?.nic || '').toLowerCase().includes(term) ||
                     roomKey.toLowerCase().includes(term);
                 if (!matches) return;
@@ -288,7 +287,7 @@ const AlreadyAssigned = () => {
             <div className="mb-4">
                 <input
                     type="text"
-                    placeholder="Search by Email, Enrolment No, Index No, NIC, Room ID"
+                    placeholder="Search by Email, Enrolment No, NIC, Room ID"
                     value={searchTerm}
                     onChange={(e) => {
                         setSearchTerm(e.target.value);
@@ -328,7 +327,6 @@ const AlreadyAssigned = () => {
                                             <th className="px-6 py-3 font-semibold">#</th>
                                             <th className="px-6 py-3 font-semibold">Enrolment No</th>
                                             <th className="px-6 py-3 font-semibold">Email</th>
-                                            <th className="px-6 py-3 font-semibold">Index No</th>
                                             <th className="px-6 py-3 font-semibold">NIC</th>
                                             <th className="px-6 py-3 font-semibold">Gender</th>
                                             <th className="px-6 py-3 font-semibold">Intake Year</th>
@@ -344,7 +342,6 @@ const AlreadyAssigned = () => {
                                                         <td className="px-6 py-3">{idx + 1}</td>
                                                         <td className="px-6 py-3">{item?.regNo?.enrolmentNo ?? 'N/A'}</td>
                                                         <td className="px-6 py-3">{item?.regNo?.email ?? 'N/A'}</td>
-                                                        <td className="px-6 py-3">{item?.regNo?.indexNo ?? 'N/A'}</td>
                                                         <td className="px-6 py-3">{item?.regNo?.nic ?? 'N/A'}</td>
                                                         <td className="px-6 py-3">{item?.regNo?.sex ?? 'N/A'}</td>
                                                         <td className="px-6 py-3">
@@ -373,9 +370,9 @@ const AlreadyAssigned = () => {
                                                         </td>
                                                     </tr>
 
-                                                    {showReassignFor === item._id && (
+                                                        {showReassignFor === item._id && (
                                                         <tr>
-                                                            <td colSpan={8} className="px-6 py-3 bg-gray-50">
+                                                            <td colSpan={7} className="px-6 py-3 bg-gray-50">
                                                                 <div className="flex items-center gap-2">
                                                                     <select
                                                                         value={selectedRoomByAlloc[item._id] || ''}

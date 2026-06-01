@@ -1,5 +1,6 @@
 import axios from 'axios';
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Link, useNavigate } from 'react-router-dom';
 ;
 import FileInput from '../../components/Form/FileInput';
@@ -15,6 +16,8 @@ const StdCreateSheet = () => {
     });
 
     const [loading, setLoading] = useState(false);
+    const [validation, setValidation] = useState(null);
+    const [allowUploadDespiteErrors, setAllowUploadDespiteErrors] = useState(false);
 
     const handleImageChange = (e) => {
         const file = e.target.files[0];
@@ -23,13 +26,103 @@ const StdCreateSheet = () => {
                 ...prevData,
                 file: file,
             }));
+            // validate immediately
+            validateSheetFile(file).then(res => setValidation(res)).catch(err => setValidation({ ok: false, error: String(err) }));
         }
+    };
+
+    const normalizeHeader = (h) => (h||'').toString().toLowerCase().replace(/\W/g,'');
+
+    const validateRow = (rowObj, rowIndex) => {
+        const errors = [];
+        const get = key => rowObj[key] ?? '';
+
+        if (!String(get('enrolmentno')).trim()) errors.push({ row: rowIndex, col: 'Enrolment No', reason: 'missing' });
+        if (!String(get('name')).trim()) errors.push({ row: rowIndex, col: 'Name', reason: 'missing' });
+
+        const sex = String(get('sex')).trim().toLowerCase();
+        if (sex && !['male','female'].includes(sex)) errors.push({ row: rowIndex, col: 'Sex', reason: `invalid value: ${sex}` });
+
+        const email = String(get('email')).trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push({ row: rowIndex, col: 'Email', reason: 'invalid email' });
+
+        const nic = String(get('nic')).trim();
+        if (nic && !/^[A-Za-z0-9]{5,}$/i.test(nic)) errors.push({ row: rowIndex, col: 'NIC', reason: 'unexpected format' });
+
+        ['phone1','phone2'].forEach(k => {
+            const v = String(get(k)).trim();
+            if (v && !/^\+?\d{6,15}$/.test(v)) errors.push({ row: rowIndex, col: k, reason: 'invalid phone' });
+        });
+
+        const d = get('dateofenrolment');
+        if (d) {
+            const parsed = new Date(d);
+            if (isNaN(parsed.getTime())) errors.push({ row: rowIndex, col: 'Date of Enrolment', reason: 'invalid date' });
+        }
+
+        const dist = get('distancekm') || get('distance');
+        if (dist !== undefined && dist !== '') {
+            const n = Number(dist);
+            if (isNaN(n) || n < 0) errors.push({ row: rowIndex, col: 'Distance (Km)', reason: 'invalid number' });
+        }
+
+        return errors;
+    };
+
+    const validateSheetFile = async (file) => {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        if (!rows || rows.length === 0) return { ok: false, error: 'empty sheet' };
+
+        const rawHeaders = rows[0].map(h => h===null||h===undefined?'':String(h));
+        const headerMap = {};
+        rawHeaders.forEach((h, i) => headerMap[ normalizeHeader(h) ] = i);
+
+        const required = ['enrolmentno','name'];
+        const missingRequired = required.filter(r => !(r in headerMap));
+        if (missingRequired.length) {
+            return { ok: false, error: 'missing required headers', missingHeaders: missingRequired };
+        }
+
+        const rowErrors = [];
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            const rowObj = {};
+            for (const [norm, idx] of Object.entries(headerMap)) {
+                rowObj[norm] = row[idx];
+            }
+            const errs = validateRow(rowObj, r+1);
+            if (errs.length) rowErrors.push(...errs);
+        }
+
+        const badCols = [...new Set(rowErrors.map(e => e.col))];
+        return { ok: rowErrors.length === 0, rowErrors, badCols, totalRows: rows.length-1 };
     };
 
     const headleUploadSheet = async () => {
         if (!sheet.file) {
             alert('Please select a file to upload.');
             return;
+        }
+        // ensure validation ran
+        if (!validation) {
+            setLoading(true);
+            try {
+                const resVal = await validateSheetFile(sheet.file);
+                setValidation(resVal);
+            } catch (err) {
+                setValidation({ ok: false, error: String(err) });
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        if (validation && !validation.ok && !allowUploadDespiteErrors) {
+            const proceed = window.confirm('Validation found issues in the sheet. Check message panel. Do you want to upload anyway?');
+            if (!proceed) return;
         }
 
         const formData = new FormData();
@@ -89,6 +182,42 @@ const StdCreateSheet = () => {
                 accept=".xlsx,.xls"
                 required
             />
+
+            {validation && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+                    {!validation.ok && validation.error && (
+                        <div className="text-sm text-red-700">Validation error: {validation.error}</div>
+                    )}
+
+                    {validation.missingHeaders && validation.missingHeaders.length > 0 && (
+                        <div className="text-sm text-red-700">Missing required headers: {validation.missingHeaders.join(', ')}</div>
+                    )}
+
+                    {validation.badCols && validation.badCols.length > 0 && (
+                        <div className="text-sm">Columns with invalid data: <strong>{validation.badCols.join(', ')}</strong></div>
+                    )}
+
+                    {validation.rowErrors && validation.rowErrors.length > 0 && (
+                        <div className="mt-2 text-sm text-gray-700">
+                            <div>Sample row errors (showing up to 10):</div>
+                            <ul className="list-disc ml-5">
+                                {validation.rowErrors.slice(0,10).map((e, i) => (
+                                    <li key={i}>Row {e.row} — {e.col}: {e.reason}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {!validation.ok && (
+                        <div className="mt-2">
+                            <label className="inline-flex items-center gap-2">
+                                <input type="checkbox" checked={allowUploadDespiteErrors} onChange={e => setAllowUploadDespiteErrors(e.target.checked)} />
+                                <span className="text-sm">I understand the risks and want to upload anyway</span>
+                            </label>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <button
                 onClick={headleUploadSheet}

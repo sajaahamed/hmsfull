@@ -178,7 +178,7 @@ const StdAssignNormal = () => {
                             </th>
                             <th className="px-6 py-4 font-semibold">#</th>
                             <th className="px-6 py-4 font-semibold">Enrolment No</th>
-                            <th className="px-6 py-4 font-semibold">Index No</th>
+                            
                             <th className="px-6 py-4 font-semibold">NIC</th>
                             <th className="px-6 py-4 font-semibold">Gender</th>
                             <th className="px-6 py-4 font-semibold">Home Town</th>
@@ -212,7 +212,7 @@ const StdAssignNormal = () => {
                                         </td>
                                         <td className="px-6 py-4">{index + 1}</td>
                                         <td className="px-6 py-4">{student.enrolmentNo || '-'}</td>
-                                        <td className="px-6 py-4">{student.indexNo || '-'}</td>
+                                        
                                         <td className="px-6 py-4">{student.nic || '-'}</td>
                                         <td className="px-6 py-4">{student.sex || '-'}</td>
                                         <td className="px-6 py-4">{student.address3 || '-'}</td>

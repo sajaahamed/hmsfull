@@ -1,6 +1,3 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
 import './App.css'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import TestPage from './pages/HomePage/TestPage'
@@ -44,6 +41,7 @@ import AdminExtraNeeds from './pages/StdExtraNeeds/AdminExtraNeeds'
 import AssignStdRoomSp from './pages/WardenDash/AssignStdRoomSp'
 import AssignStundetToRoomSp from './pages/WardenDash/AssignStundetToRoomSp'
 import AlreadyAssigned from './pages/WardenDash/AlreadyAssigned'
+import BackupOptions from './pages/BackupOptions/BackupOptions'
 
 function App() {
     return (
@@ -71,6 +69,8 @@ function App() {
                         <Route path='View-user/:id' element={<PrivateRoute element={<ViewUser /> } /> } />
 
                         <Route path='Profile' element={<PrivateRoute element={<Profile /> } /> } />
+
+                        <Route path='BackupOptions' element={<PrivateRoute element={<BackupOptions /> } allowedRoles={['admin', 'director']} /> } />
 
                         <Route path='Students' element={<PrivateRoute element={<Students /> } /> } />
                         <Route path='Student-create-manually' element={<PrivateRoute element={<StdCreateManually /> } /> } />

@@ -18,7 +18,6 @@ const StdData = () => {
         })
             .then(res => {
                 setAllStds(res.data.Result)
-                setFilteredStds(res.data.Result)
             })
             .catch(err => console.log(err))
     }, [])
