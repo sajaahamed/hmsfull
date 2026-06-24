@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import DefaultInput from '../../components/Form/DefaultInput'
-import { FaFemale, FaMale } from 'react-icons/fa'
+import { FaFemale, FaMale, FaUserTie } from 'react-icons/fa'
 import Dropdown from '../../components/Form/Dropdown'
 
 const DEPARTMENT_MAP = {
@@ -18,7 +18,7 @@ const AllStudents = () => {
     const [filteredStudents, setFilteredStudents] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
     const [allHostels, setAllHostels] = useState([])
-    
+
     const [sortOrder, setSortOrder] = useState('asc') // 'asc' or 'desc' for enrolmentNo
     const [assignmentStatus, setAssignmentStatus] = useState('All')
     const [minDistance, setMinDistance] = useState('')
@@ -26,6 +26,7 @@ const AllStudents = () => {
     const [genderFilter, setGenderFilter] = useState('')
     const [departmentFilter, setDepartmentFilter] = useState('')
     const [yearFilter, setYearFilter] = useState('')
+    const [assignedYearFilter, setAssignedYearFilter] = useState('')
     const [hostelFilter, setHostelFilter] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
     const recordsPerPage = 15
@@ -120,6 +121,15 @@ const AllStudents = () => {
     const yearOptions = React.useMemo(() => {
         const set = new Set(allstds.map(s => getYear(s.enrolmentNo)))
         return [{ value: '', label: 'All' }, ...Array.from(set).sort().map(y => ({ value: y, label: `20${y}` }))]
+    }, [allstds])
+
+    const assignedYearOptions = React.useMemo(() => {
+        const set = new Set(
+            allstds
+                .filter(s => s.hostelAssignedDate)
+                .map(s => new Date(s.hostelAssignedDate).getFullYear().toString())
+        )
+        return [{ value: '', label: 'All' }, ...Array.from(set).sort().map(y => ({ value: y, label: y }))]
     }, [allstds])
 
 
@@ -226,7 +236,7 @@ const AllStudents = () => {
                 (minDistance === '' || (student.distance && student.distance >= Number(minDistance))) &&
                 (maxDistance === '' || (student.distance && student.distance <= Number(maxDistance)))
 
-            const matchesGender = genderFilter === '' || student.sex === genderFilter
+            const matchesGender = genderFilter === '' || (student.sex && student.sex.trim().toLowerCase() === genderFilter.trim().toLowerCase());
 
             let matchesDepartment = false
             if (departmentFilter === '') {
@@ -248,9 +258,12 @@ const AllStudents = () => {
 
             const matchesYear = yearFilter === '' || getYear(student.enrolmentNo) === yearFilter
 
+            const matchesAssignedYear = assignedYearFilter === '' ||
+                (student.hostelAssignedDate && new Date(student.hostelAssignedDate).getFullYear().toString() === assignedYearFilter)
+
             const matchesHostel = hostelFilter === '' || String(student.hostelId || '') === String(hostelFilter)
 
-            return matchesSearch && matchesAssigned && matchesDistance && matchesGender && matchesDepartment && matchesYear && matchesHostel
+            return matchesSearch && matchesAssigned && matchesDistance && matchesGender && matchesDepartment && matchesYear && matchesHostel && matchesAssignedYear
         })
 
         // sort by enrolmentNo (if present)
@@ -264,7 +277,7 @@ const AllStudents = () => {
 
         setFilteredStudents(filtered)
         setCurrentPage(1)
-    }, [searchTerm, allstds, assignmentStatus, minDistance, maxDistance, genderFilter, departmentFilter, yearFilter, hostelFilter, sortOrder])
+    }, [searchTerm, allstds, assignmentStatus, minDistance, maxDistance, genderFilter, departmentFilter, yearFilter, hostelFilter, sortOrder, assignedYearFilter])
 
     const totalPages = Math.ceil(filteredStudents.length / recordsPerPage)
     const paginatedData = filteredStudents.slice(
@@ -274,18 +287,35 @@ const AllStudents = () => {
 
     const exportToCSV = () => {
         const headers = [
-            'No', 'Enrolment No', 'Name', 'Title', 'Last Name', 'Initials', 'Full Name', 'A/L District',
-            'Sex', 'Medium', 'NIC', 'Address Line 1', 'Address Line 2', 'Address Line 3', 'Full Address',
-            'Email', 'Phone 1', 'Phone 2', 'Intake', 'Date of Enrolment', 'Distance (Km)', 'Hostel Assigned'
+            'No', 'Enrolment No', 'Name', 'A/L District',
+            'Sex', 'NIC', 'Address Line 1', 'Address Line 2', 'Address Line 3', 'Full Address',
+            'Intake', 'Batch', 'Main Department', 'Date of Enrolment', 'Study Year', 'Distance (Km)', 'Hostel Assigned'
         ]
         const rows = filteredStudents.map(std => {
+            let studyYear = ''
+            if (std.dateOfEnrolment) {
+                const currentYear = new Date().getFullYear()
+                const enrolYear = new Date(std.dateOfEnrolment).getFullYear()
+                studyYear = `Year ${(currentYear - enrolYear) + 1}`
+            }
+
+            let batch = ''
+            if (std.enrolmentNo) {
+                const parts = std.enrolmentNo.split('/')
+                if (parts.length >= 2) {
+                    batch = `${parts[0]}/${parts[1]}/`
+                }
+            }
+            const mainDeptCode = getMainDept(std.enrolmentNo)
+            const mainDept = DEPARTMENT_MAP[mainDeptCode] || mainDeptCode
+
             return [
-                std.no || '', std.enrolmentNo || '', std.name || '', std.title || '',
-                std.lastName || '', std.initials || '', std.fullName || '', std.alDistrict || '', std.sex || '',
-                std.medium || '', (std.nic ? "'" + std.nic : ''), std.address1 || '', std.address2 || '',
-                std.address3 || '', std.fullAddress || '', std.email || '', (std.phone1 ? "'" + std.phone1 : ''), (std.phone2 ? "'" + std.phone2 : ''),
-                std.intake || '',
+                std.no || '', std.enrolmentNo || '', std.name || '', std.alDistrict || '', std.sex || '',
+                (std.nic ? "'" + std.nic : ''), std.address1 || '', std.address2 || '',
+                std.address3 || '', std.fullAddress || '',
+                std.intake || '', batch, mainDept,
                 std.dateOfEnrolment ? new Date(std.dateOfEnrolment).toLocaleDateString() : '',
+                studyYear,
                 std.distance ?? '', (std.hostelName || (isStudentAssigned(std) ? 'Assigned' : 'Not Assigned'))
             ]
         })
@@ -351,6 +381,16 @@ const AllStudents = () => {
 
                 <Dropdown
                     inline
+                    label="Assigned Year"
+                    name="assignedYearFilter"
+                    value={assignedYearFilter}
+                    onChange={e => setAssignedYearFilter(e.target.value)}
+                    options={assignedYearOptions}
+                    className="w-32"
+                />
+
+                <Dropdown
+                    inline
                     label="Hostel"
                     name="hostelFilter"
                     value={hostelFilter}
@@ -391,6 +431,7 @@ const AllStudents = () => {
                         { value: '', label: 'All' },
                         { value: 'Male', label: 'Male' },
                         { value: 'Female', label: 'Female' },
+                        { value: 'REV', label: 'REV' },
                     ]}
                     className="w-28"
                 />
@@ -416,7 +457,7 @@ const AllStudents = () => {
                         <tr>
                             <th className="px-6 py-4">#</th>
                             <th className="px-6 py-4">Enrolment No</th>
-                            
+                            <th className="px-6 py-4">Study Year</th>
                             <th className="px-6 py-4">NIC</th>
                             <th className="px-6 py-4">Gender</th>
                             <th className="px-6 py-4">Home Town</th>
@@ -433,7 +474,9 @@ const AllStudents = () => {
                                         {(currentPage - 1) * recordsPerPage + index + 1}
                                     </td>
                                     <td className="px-6 py-4">{data.enrolmentNo}</td>
-                                    
+                                    <td className="px-6 py-4">
+                                        {data.dateOfEnrolment ? `Year ${(new Date().getFullYear() - new Date(data.dateOfEnrolment).getFullYear()) + 1}` : ''}
+                                    </td>
                                     <td className="px-6 py-4">{data.nic}</td>
                                     <td className="px-6 py-4">
                                         {data.sex === 'Male' ? (
@@ -441,10 +484,15 @@ const AllStudents = () => {
                                                 <FaMale className="h-4 w-auto" />
                                                 Male
                                             </span>
-                                        ) : (
+                                        ) : data.sex === 'Female' ? (
                                             <span className="flex bg-pink-100 text-pink-700 text-xs font-semibold px-3 py-1 rounded-full gap-1 items-center">
                                                 <FaFemale className="h-4 w-auto" />
                                                 Female
+                                            </span>
+                                        ) : (
+                                            <span className="flex bg-orange-100 text-orange-700 text-xs font-semibold px-3 py-1 rounded-full gap-1 items-center">
+                                                <FaUserTie className="h-4 w-auto" />
+                                                {data.sex || 'REV'}
                                             </span>
                                         )}
                                     </td>

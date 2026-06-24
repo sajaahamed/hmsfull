@@ -56,7 +56,7 @@ const SignIn = () => {
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
                 navigate('/Dashboard/Home');
-                 window.location.reload();
+                window.location.reload();
             } else {
                 setError(res.data.Error || 'Sign-in failed');
             }
@@ -91,9 +91,8 @@ const SignIn = () => {
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-center flex-grow max-w-6xl w-full mx-auto auth-content">
                 <div
-                    className={`flex flex-col items-center mb-8 md:mb-0 md:mr-10 text-center ${
-                        showRolePicker ? '-mt-4 sm:-mt-24 md:-mt-36' : 'mt-0'
-                    }`}
+                    className={`flex flex-col items-center mb-8 md:mb-0 md:mr-10 text-center ${showRolePicker ? '-mt-4 sm:-mt-24 md:-mt-36' : 'mt-0'
+                        }`}
                 >
                     <div className="logo-badge mb-4 inline-block scale-105">
                         <img
@@ -110,11 +109,10 @@ const SignIn = () => {
                         <div className="welcome-underline" />
                     </div>
                     <div
-                        className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                            showRolePicker
+                        className={`transition-all duration-300 ease-in-out overflow-hidden ${showRolePicker
                                 ? 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
                                 : 'max-h-[600px] opacity-100 translate-y-0'
-                        }`}
+                            }`}
                     >
                         <p className="welcome-subtitle">Read SignUp Guides</p>
                         <div
@@ -191,11 +189,10 @@ const SignIn = () => {
                 </div>
 
                 <div
-                    className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
-                        showRolePicker
+                    className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${showRolePicker
                             ? 'max-w-0 max-h-0 opacity-0 translate-y-2 pointer-events-none'
                             : 'max-w-md max-h-[900px] opacity-100 translate-y-0'
-                    }`}
+                        }`}
                     aria-hidden={showRolePicker}
                 >
                     <div className="w-full glass-card p-6 sm:p-8 rounded-2xl shadow-md">
@@ -216,11 +213,10 @@ const SignIn = () => {
                         )}
 
                         <div
-                            className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                                showRolePicker
+                            className={`transition-all duration-300 ease-in-out overflow-hidden ${showRolePicker
                                     ? 'max-h-0 opacity-0 translate-y-2 pointer-events-none'
                                     : 'max-h-[900px] opacity-100 translate-y-0'
-                            }`}
+                                }`}
                         >
                             <form onSubmit={handleSubmit}>
                                 <DefaultInput
@@ -280,7 +276,7 @@ const SignIn = () => {
                                 </button>
                             </form>
 
-                            <div className="mt-4 flex justify-between items-center text-sm">
+                            <div className={`mt-4 flex ${loginMode === 'student' ? 'justify-start' : 'justify-between'} items-center text-sm`}>
                                 <p className="transition">
                                     <a
                                         href="/Forgetpassword"
@@ -289,14 +285,17 @@ const SignIn = () => {
                                         Forgot password?
                                     </a>
                                 </p>
-                                <p className="transition">
-                                    <a
-                                        href="/register"
-                                        className="text-green-600 hover:text-green-700 hover:underline font-medium transition"
-                                    >
-                                        Create Account
-                                    </a>
-                                </p>
+                                {/* Conditionally render Create Account link */}
+                                {loginMode !== 'student' && (
+                                    <p className="transition">
+                                        <a
+                                            href="/register"
+                                            className="text-green-600 hover:text-green-700 hover:underline font-medium transition"
+                                        >
+                                            Create Account
+                                        </a>
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -304,11 +303,10 @@ const SignIn = () => {
             </div>
 
             <div
-                className={`fixed bottom-48 sm:bottom-28 md:bottom-36 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 ease-in-out ${
-                    showRolePicker
+                className={`fixed bottom-48 sm:bottom-28 md:bottom-36 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 ease-in-out ${showRolePicker
                         ? 'opacity-100 translate-y-0'
                         : 'opacity-0 translate-y-2 pointer-events-none'
-                }`}
+                    }`}
             >
                 <div className="glass-card p-4 rounded-2xl shadow-md w-[min(92vw,20rem)]">
                     <p className="text-sm text-gray-700 font-semibold text-center mb-3">
@@ -345,10 +343,10 @@ const SignIn = () => {
                     title="Student Sign-Up Guide"
                     content={
                         <ul className="list-disc ml-5 space-y-2">
-                            <li>wait for email to confram that your account is Created and Active.</li>
-                            <li>if you got the email there are credentials to log in to system</li>
-                            <li>Eveny Student Account Defult Password is <strong>12345678</strong></li>
-                            <li><span className='uppercase font-semibold text-red-500'>important</span>: After Login with credentials please update the Password.</li>
+                            <li>Wait for email to confirm that your account is created and active.</li>
+                            <li>If you receive the email, it contains credentials to log in to the system.</li>
+                            <li>Every student account default password is <strong>12345678</strong>.</li>
+                            <li><span className='uppercase font-semibold text-red-500'>Important</span>: After login with credentials please update the password.</li>
                         </ul>
                     }
                     onClose={() => setShowStudentGuide(false)}
@@ -362,7 +360,7 @@ const SignIn = () => {
                     content={
                         <ul className="list-disc ml-5 space-y-2">
                             <li>Sign up using official university credentials.</li>
-                            <li>Then you goto Email Verify page if you not verify email at that stage you cannot verify email after</li>
+                            <li>Then you go to Email Verify page if you do not verify email at that stage you cannot verify email after.</li>
                             <li>Your account will be verified by the admin.</li>
                             <li>Once approved, you can go to Dashboard.</li>
                         </ul>

@@ -32,7 +32,8 @@ function normalizeGender(value) {
     const raw = String(value ?? '').trim().toLowerCase();
     if (raw === 'm' || raw === 'male') return 'Male';
     if (raw === 'f' || raw === 'female') return 'Female';
-    return 'Other';
+    if (raw === 'rev' || raw === 'reverend') return 'REV';
+    return null;
 }
 
 // Geocoding function using OpenCage API
@@ -122,7 +123,7 @@ async function getDistanceWithGoogleDirections(origin, dest, apiKey) {
     }
 }
 
-// Helper: get distance (km) using Google Distance Matrix API
+// Helper: get distance (km) using Google Distance Matrix API (driving)
 async function getDistanceWithDistanceMatrix(origin, dest, apiKey) {
     try {
         const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(dest)}&key=${apiKey}&units=metric`;
@@ -140,6 +141,69 @@ async function getDistanceWithDistanceMatrix(origin, dest, apiKey) {
     } catch (err) {
         console.error('[getDistanceWithDistanceMatrix] Exception:', err.message);
         return null;
+    }
+}
+
+/**
+ * Transit Distance Matrix — bus only, arriving by a given time.
+ *
+ * Uses arrival_time so the API calculates the journey backwards from the desired arrival time.
+ *
+ * Parameters sent to the API:
+ *  mode=transit                           → public transit
+ *  transit_mode=bus                       → prefer bus routes
+ *  arrival_time                           → Unix epoch (seconds) when student needs to arrive
+ *  transit_routing_preference=fewer_transfers → fewest changes (most direct / optimistic)
+ *
+ * NOTE: avoid (highways|tolls|ferries) and traffic_model are DRIVING-only
+ *       and are silently ignored when mode=transit.
+ *
+ * @param {string} origin
+ * @param {string} dest
+ * @param {string} apiKey
+ * @param {number} arrivalUnix  Unix timestamp (seconds) of arrival time
+ * @returns {Promise<{distanceKm, durationSec, durationText, source, apiStatus}>}
+ */
+async function getTransitDistanceMatrix(origin, dest, apiKey, arrivalUnix) {
+    try {
+        const params = new URLSearchParams({
+            origins:      origin,
+            destinations: dest,
+            key:          apiKey,
+            units:        'metric',
+            mode:         'transit',
+            transit_mode: 'bus',
+            transit_routing_preference: 'fewer_transfers', // most direct route / optimistic
+            arrival_time: String(Math.round(arrivalUnix)),
+        });
+
+        const url = `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`;
+        console.log('[getTransitDistanceMatrix] Calling Transit DM API...');
+
+        const resp = await axios.get(url);
+        const data = resp.data;
+
+        if (!data || data.status !== 'OK') {
+            console.warn('[getTransitDistanceMatrix] Top-level status:', data && data.status, data && data.error_message);
+            return { distanceKm: null, durationSec: null, durationText: null, apiStatus: data && data.status };
+        }
+
+        const el = data.rows?.[0]?.elements?.[0];
+        if (!el || el.status !== 'OK') {
+            console.warn('[getTransitDistanceMatrix] Element status:', el && el.status);
+            return { distanceKm: null, durationSec: null, durationText: null, apiStatus: 'ELEMENT_NOT_OK' };
+        }
+
+        const distanceKm  = el.distance && typeof el.distance.value === 'number'
+            ? +(el.distance.value / 1000).toFixed(2) : null;
+        const durationSec = el.duration && typeof el.duration.value === 'number'
+            ? el.duration.value : null;
+        const durationText = el.duration && el.duration.text ? el.duration.text : null;
+
+        return { distanceKm, durationSec, durationText, apiStatus: 'OK' };
+    } catch (err) {
+        console.error('[getTransitDistanceMatrix] Exception:', err.message);
+        return { distanceKm: null, durationSec: null, durationText: null, apiStatus: 'EXCEPTION', error: err.message };
     }
 }
 
@@ -174,43 +238,87 @@ async function getPlaceInfo(address, apiKey) {
     }
 }
 
-// ── Shared helper: calculate distance (Google → Nominatim+OSRM → OpenCage+OSRM) ──
-const universityAddress = 'Gymnasium, University of Peradeniya, 20400';
+// ── Shared helper: calculate distance ──
+// Priority order:
+//   1. Transit Distance Matrix API  (bus, arrival_time = 8:00 AM tomorrow)
+//   2. Driving Distance Matrix API  (fallback when transit returns ZERO_RESULTS)
+//   3. Nominatim + OSRM            (free, no API key needed)
+//   4. OpenCage + OSRM             (free fallback)
+//
+// Returns: { distanceKm, durationSec, durationText, source }
+//   distanceKm  – km stored on the Student document
+//   durationSec – bus journey duration in seconds (null for non-transit sources)
+//   durationText– human string e.g. "2 hours 15 mins"
+//   source      – which provider was used
+const universityAddress = process.env.UNIVERSITY_ADDRESS || 'Gymnasium, University of Peradeniya, 20400';
+
+// Returns Unix timestamp (seconds) for 8:00 AM the next calendar day (local server time).
+// Used as arrival_time so the transit API computes the actual travelling path to arrive by 8 AM.
+function nextDayArrival8AM() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(8, 0, 0, 0); // arrive by 8 AM next day
+    return Math.round(tomorrow.getTime() / 1000);
+}
 
 async function calculateDistance(originAddress) {
     if (!originAddress) {
         console.log('[calculateDistance] No origin address provided — skipping.');
-        return null;
+        return { distanceKm: null, durationSec: null, durationText: null, source: null };
     }
 
     console.log('[calculateDistance] Computing distance for:', originAddress);
 
-    // 1. Try Google (Directions API preferred if configured, else Distance Matrix)
     if (process.env.GOOGLE_MAPS_API_KEY) {
         try {
-            const useDirections = /^(1|true)$/i.test(process.env.GOOGLE_MAPS_USE_DIRECTIONS || '');
-            // prefer geocoded place_id or lat/lng to match Maps UI
-            const originInfo = await getPlaceInfo(originAddress, process.env.GOOGLE_MAPS_API_KEY);
-            const uniInfo = await getPlaceInfo(universityAddress, process.env.GOOGLE_MAPS_API_KEY);
-            const originParam = originInfo && originInfo.place_id ? `place_id:${originInfo.place_id}` : (originInfo && originInfo.location ? `${originInfo.location.lat},${originInfo.location.lng}` : originAddress);
-            const destParam = uniInfo && uniInfo.place_id ? `place_id:${uniInfo.place_id}` : (uniInfo && uniInfo.location ? `${uniInfo.location.lat},${uniInfo.location.lng}` : universityAddress);
+            const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
-            if (useDirections) {
-                console.log('[calculateDistance] Using Google Directions API (configured) with place_id/coords ...');
-                const km = await getDistanceWithGoogleDirections(originParam, destParam, process.env.GOOGLE_MAPS_API_KEY);
-                if (km !== null) {
-                    console.log('[calculateDistance] Google Directions result:', +km.toFixed(2), 'km');
-                    return +km.toFixed(2);
-                }
-                console.warn('[calculateDistance] Google Directions failed — falling back to other providers...');
+            // Resolve place_id / coords once — shared by both transit and driving calls
+            const [originInfo, uniInfo] = await Promise.all([
+                getPlaceInfo(originAddress, apiKey),
+                getPlaceInfo(universityAddress, apiKey),
+            ]);
+            const originParam = originInfo && originInfo.place_id
+                ? `place_id:${originInfo.place_id}`
+                : (originInfo && originInfo.location
+                    ? `${originInfo.location.lat},${originInfo.location.lng}`
+                    : originAddress);
+            const destParam = uniInfo && uniInfo.place_id
+                ? `place_id:${uniInfo.place_id}`
+                : (uniInfo && uniInfo.location
+                    ? `${uniInfo.location.lat},${uniInfo.location.lng}`
+                    : universityAddress);
+
+            // ── Priority 1: Transit Distance Matrix (bus, arrival 8 AM tomorrow) ──
+            console.log('[calculateDistance] Priority 1 — Transit DM (bus, arrival_time 8 AM tomorrow)...');
+            const arrivalUnix = nextDayArrival8AM();
+            const transitResult = await getTransitDistanceMatrix(originParam, destParam, apiKey, arrivalUnix);
+
+            if (transitResult.apiStatus === 'OK' && transitResult.distanceKm !== null) {
+                console.log(`[calculateDistance] Transit DM OK: ${transitResult.distanceKm} km, travel time: ${transitResult.durationText}`);
+                return {
+                    distanceKm:  transitResult.distanceKm,
+                    durationSec: transitResult.durationSec,
+                    durationText: transitResult.durationText,
+                    source: 'transit-distance-matrix',
+                };
             }
+            console.warn('[calculateDistance] Transit DM status:', transitResult.apiStatus, '— falling back to driving...');
 
-            console.log('[calculateDistance] Using Google Distance Matrix with place_id/coords...');
-            const dmKm = await getDistanceWithDistanceMatrix(originParam, destParam, process.env.GOOGLE_MAPS_API_KEY);
+            // ── Priority 2: Driving (Directions or Distance Matrix) ──
+            const useDirections = /^(1|true)$/i.test(process.env.GOOGLE_MAPS_USE_DIRECTIONS || '');
+            if (useDirections) {
+                console.log('[calculateDistance] Priority 2 — Driving Directions API...');
+                const km = await getDistanceWithGoogleDirections(originParam, destParam, apiKey);
+                if (km !== null) {
+                    return { distanceKm: +km.toFixed(2), durationSec: null, durationText: null, source: 'driving-directions' };
+                }
+            }
+            console.log('[calculateDistance] Priority 2 — Driving Distance Matrix...');
+            const dmKm = await getDistanceWithDistanceMatrix(originParam, destParam, apiKey);
             if (dmKm !== null) {
-                const km = +dmKm.toFixed(2);
-                console.log('[calculateDistance] Google DistanceMatrix result:', km, 'km');
-                return km;
+                return { distanceKm: +dmKm.toFixed(2), durationSec: null, durationText: null, source: 'driving-distance-matrix' };
             }
         } catch (err) {
             console.error('[calculateDistance] Google API exception:', err.message);
@@ -219,39 +327,40 @@ async function calculateDistance(originAddress) {
         console.log('[calculateDistance] No GOOGLE_MAPS_API_KEY — skipping Google.');
     }
 
-    // 2. Try Nominatim + OSRM (free)
+    // ── Priority 3: Nominatim + OSRM ──
     try {
-        console.log('[calculateDistance] Using Nominatim + OSRM...');
+        console.log('[calculateDistance] Priority 3 — Nominatim + OSRM...');
         const studentCoords = await geocodeWithNominatim(originAddress);
-        console.log('[calculateDistance] Student coords (Nominatim):', studentCoords);
-        const uniCoords = await geocodeWithNominatim(universityAddress);
-        console.log('[calculateDistance] University coords (Nominatim):', uniCoords);
+        const uniCoords     = await geocodeWithNominatim(universityAddress);
         if (studentCoords && uniCoords) {
             const dkm = await getRoadDistanceOSRM(studentCoords, uniCoords);
-            console.log('[calculateDistance] OSRM result:', dkm, 'km');
-            if (dkm !== null) return +dkm.toFixed(2);
+            if (dkm !== null) {
+                return { distanceKm: +dkm.toFixed(2), durationSec: null, durationText: null, source: 'nominatim-osrm' };
+            }
         }
     } catch (err) {
         console.error('[calculateDistance] Nominatim/OSRM error:', err.message);
     }
 
-    // 3. Fallback: OpenCage + OSRM
+    // ── Priority 4: OpenCage + OSRM ──
     if (process.env.OPENCAGE_API_KEY) {
         try {
-            console.log('[calculateDistance] Falling back to OpenCage + OSRM...');
+            console.log('[calculateDistance] Priority 4 — OpenCage + OSRM...');
             const studentCoords = await geocodeWithOpenCage(originAddress);
-            const uniCoords = await geocodeWithOpenCage(universityAddress);
+            const uniCoords     = await geocodeWithOpenCage(universityAddress);
             if (studentCoords && uniCoords) {
                 const dkm = await getRoadDistanceOSRM(studentCoords, uniCoords);
-                if (dkm !== null) return +dkm.toFixed(2);
+                if (dkm !== null) {
+                    return { distanceKm: +dkm.toFixed(2), durationSec: null, durationText: null, source: 'opencage-osrm' };
+                }
             }
         } catch (err) {
             console.error('[calculateDistance] OpenCage/OSRM fallback error:', err.message);
         }
     }
 
-    console.log('[calculateDistance] Could not compute distance — returning null.');
-    return null;
+    console.log('[calculateDistance] All providers failed — returning null.');
+    return { distanceKm: null, durationSec: null, durationText: null, source: null };
 }
 
 
@@ -297,21 +406,20 @@ const StudentController = {
                 });
                 const get = (k) => norm[k.replace(/\W/g, '').toLowerCase()];
 
-                // Determine a unique identifier for the row. If none exists, skip the row
-                const idField = get('Enrolment_No.') || get('enrolmentNo') || get('enrolmentno') || get('nic') || get('email');
+                // Determine enrolment number and trim any leading/trailing spaces
+                let enrolVal = get('Enrolment_No.') || get('enrolmentno') || get('Enrollment_No.') || get('enrollmentno');
+                if (typeof enrolVal === 'string') {
+                    enrolVal = enrolVal.trim();
+                }
+
+                const idField = enrolVal;
                 if (!idField) {
                     // No reliable unique id -> skip this row
                     duplicateStudents.push(null);
                     continue;
                 }
 
-                const exists = await Student.findOne({
-                    $or: [
-                        { enrolmentNo: get('Enrolment_No.') || get('enrolmentno') },
-                        { nic: get('NIC') },
-                        { email: get('email') }
-                    ]
-                });
+                const exists = await Student.findOne({ enrolmentNo: enrolVal });
 
                 if (exists) {
                     duplicateStudents.push(idField);
@@ -321,28 +429,24 @@ const StudentController = {
                 const studentData = {
                     no: get('No'),
                     name: get('Name'),
-                    title: get('Title'),
-                    lastName: get('L_Name') || get('lname'),
-                    initials: get('Initials'),
-                    fullName: get('Full_Name') || get('fullname'),
                     alDistrict: get('alDistrict') || get('aldistrict'),
                     sex: normalizeGender(get('Sex') ?? get('Gender')),
-                    medium: get('Medium'),
                     nic: get('NIC'),
                     address1: get('ADD1') || get('add1'),
                     address2: get('ADD2') || get('add2'),
                     address3: get('ADD3') || get('add3'),
                     fullAddress: get('Address') || get('fullAddress'),
-                    email: get('email'),
-                    phone1: get('Phone_No') || get('phoneno') || get('phone_no'),
-                    phone2: get('Phone_No_2') || get('phone_no_2') || '',
                     intake: get('Intake'),
-                    dateOfEnrolment: get('Date_of_Enollment') || get('dateofenrolment') || get('dateofenrollment'),
-                    distance: null
+                    dateOfEnrolment: get('Date_of_Enollment') || get('dateofenrolment') || get('dateofenrollment') || get('dateofenrollment') || get('dateofenrollment'),
+                    department: get('Department') || get('department'),
+                    batchYear: get('Batch_Year') || get('batchyear'),
+                    studyYear: get('Study_Year') || get('studyyear'),
+                    distance: null,
+                    isAssign: false,
+                    eligibilityStatus: 'Not Eligible'
                 };
 
                 // Only set enrolmentNo if present (avoid explicit nulls which trigger unique index conflicts)
-                const enrolVal = get('Enrolment_No.') || get('enrolmentno');
                 if (enrolVal) studentData.enrolmentNo = enrolVal;
 
                 // Auto-calculate distance using combined address for better accuracy
@@ -351,12 +455,16 @@ const StudentController = {
                     || studentData.address3;
                 if (originAddress) {
                     const searchAddress = /sri\s*lanka/i.test(originAddress) ? originAddress : `${originAddress}, Sri Lanka`;
-                    const distanceKm = await calculateDistance(searchAddress);
-                    if (distanceKm !== null) {
-                        studentData.distance = distanceKm;
+                    const distResult = await calculateDistance(searchAddress);
+                    if (distResult.distanceKm !== null) {
+                        studentData.distance            = distResult.distanceKm;
+                        studentData.transitDurationSec  = distResult.durationSec  || null;
+                        studentData.transitDurationText = distResult.durationText || null;
+                        studentData.distanceSource      = distResult.source       || null;
                     }
+                    console.log(`[sheet] ${studentData.enrolmentNo || '?'} → ${distResult.distanceKm} km (${distResult.durationText || 'n/a'}) via ${distResult.source}`);
                     // small delay to avoid rate limits
-                    await new Promise(rp => setTimeout(rp, 200));
+                    await new Promise(rp => setTimeout(rp, 300));
                 }
 
                 insertedStudents.push(studentData);
@@ -369,7 +477,7 @@ const StudentController = {
                 console.log('[createstdviaSheet] total rows in sheet:', studentsFromExcel.length);
                 console.log('[createstdviaSheet] prepared documents for insert:', insertedStudents.length);
                 console.log('[createstdviaSheet] skipped/duplicate candidates so far:', duplicateStudents.length);
-                console.log('[createstdviaSheet] sample prepared docs:', insertedStudents.slice(0, 5).map(d => ({ enrolmentNo: d.enrolmentNo || null, email: d.email || null })));
+                console.log('[createstdviaSheet] sample prepared docs:', insertedStudents.slice(0, 5).map(d => ({ enrolmentNo: d.enrolmentNo || null })));
                 const ops = insertedStudents.map(doc => ({ insertOne: { document: doc } }));
                 try {
                     const bulkRes = await Student.bulkWrite(ops, { ordered: false });
@@ -390,7 +498,8 @@ const StudentController = {
                         for (const we of err.writeErrors) {
                             const idx = we.index;
                             const doc = insertedStudents[idx];
-                            const id = (doc && (doc.enrolmentNo || doc.email || doc.nic)) || null;
+                            let id = (doc && doc.enrolmentNo) || null;
+                            if (typeof id === 'string') id = id.trim();
                             duplicateStudents.push(id);
                         }
                     }
@@ -427,7 +536,9 @@ const StudentController = {
             const results = [];
             for (const r of rows) {
                 const address = r['Address'] || r['fullAddress'] || r['HomeAddress'] || r['ADD3'] || r['ADD1'] || r['Address1'];
-                const idField = r['Enrolment_No.'] || r['enrolmentNo'] || r['email'];
+                let enrolmentNoVal = r['Enrolment_No.'] || r['enrolmentNo'] || r['Enrollment_No.'] || r['enrollmentNo'] || r['enrolmentno'] || r['enrollmentno'];
+                if (typeof enrolmentNoVal === 'string') enrolmentNoVal = enrolmentNoVal.trim();
+                const idField = enrolmentNoVal;
 
                 if (!address) {
                     results.push({ id: idField || null, status: 'Skipped', reason: 'No address found in row' });
@@ -462,13 +573,7 @@ const StudentController = {
 
                     let updated = null;
                     if (idField) {
-                        const query = {
-                            $or: [
-                                        { enrolmentNo: idField },
-                                        { email: idField },
-                                        { nic: idField }
-                                    ]
-                        };
+                        const query = { enrolmentNo: idField };
                         updated = await Student.findOneAndUpdate(query, { distance: distanceKm }, { new: true });
                     }
 
@@ -547,10 +652,10 @@ const StudentController = {
                     if (idField) {
                         const query = {
                             $or: [
-                                    { enrolmentNo: idField },
-                                    { email: idField },
-                                    { nic: idField }
-                                ]
+                                { enrolmentNo: idField },
+                                { email: idField },
+                                { nic: idField }
+                            ]
                         };
                         updated = await Student.findOneAndUpdate(query, { distance: distanceKm }, { new: true });
                     }
@@ -576,41 +681,30 @@ const StudentController = {
             const {
                 enrolmentNo,
                 name,
-                title,
-                lastName,
-                initials,
-                fullName,
                 alDistrict,
                 sex,
-                medium,
                 nic,
                 address1,
                 address2,
                 address3,
                 fullAddress,
-                email,
-                phone1,
-                phone2,
                 intake,
                 dateOfEnrolment,
                 distance
             } = req.body;
 
 
-            const existingStudent = await Student.findOne({
-                $or: [
-                    { enrolmentNo },
-                    { nic },
-                    { email }
-                ]
-            });
+            const existingStudent = await Student.findOne({ enrolmentNo });
 
             if (existingStudent) {
-                return res.json({ error: "Student already exists with the provided enrolment number, NIC, or email." });
+                return res.json({ error: "Student already exists with the provided enrolment number." });
             }
 
             // Auto-calculate distance from address if not provided
-            let computedDistance = distance;
+            let computedDistance    = distance;
+            let computedDurationSec  = null;
+            let computedDurationText = null;
+            let computedDistSource   = null;
             if (!distance && (address3 || fullAddress || address1 || address2)) {
                 const originAddress = fullAddress
                     || [address1, address2, address3].filter(Boolean).join(', ')
@@ -618,30 +712,32 @@ const StudentController = {
                 const searchAddress = /sri\s*lanka/i.test(originAddress)
                     ? originAddress
                     : `${originAddress}, Sri Lanka`;
-                computedDistance = await calculateDistance(searchAddress);
+                const distResult = await calculateDistance(searchAddress);
+                computedDistance    = distResult.distanceKm;
+                computedDurationSec  = distResult.durationSec;
+                computedDurationText = distResult.durationText;
+                computedDistSource   = distResult.source;
+                console.log(`[createStudentManually] ${enrolmentNo} → ${computedDistance} km (${computedDurationText || 'n/a'}) via ${computedDistSource}`);
             }
 
             const newStudent = new Student({
                 enrolmentNo,
                 name,
-                title,
-                lastName,
-                initials,
-                fullName,
                 alDistrict,
                 sex: normalizeGender(sex),
-                medium,
                 nic,
                 address1,
                 address2,
                 address3,
                 fullAddress,
-                email,
-                phone1,
-                phone2,
                 intake,
                 dateOfEnrolment,
-                distance: computedDistance
+                distance:            computedDistance,
+                transitDurationSec:  computedDurationSec,
+                transitDurationText: computedDurationText,
+                distanceSource:      computedDistSource,
+                isAssign: false,
+                eligibilityStatus: 'Not Eligible'
             });
 
             await newStudent.save();
@@ -819,36 +915,37 @@ const StudentController = {
             const { id } = req.params;
             const {
                 name,
-                title,
-                lastName,
-                initials,
-                fullName,
                 alDistrict,
                 sex,
-                medium,
                 address1,
                 address2,
                 address3,
                 fullAddress,
-                phone1,
-                phone2,
                 intake,
                 dateOfEnrolment,
                 distance
             } = req.body;
 
-            // Auto-calculate distance from address if not provided
-            let computedDistance = distance || null;
-            if (!computedDistance && (address3 || fullAddress || address1 || address2)) {
+            // Always recalculate when address is present — ensures Transit DM API is used
+            let computedDistance    = distance || null;
+            let computedDurationSec  = null;
+            let computedDurationText = null;
+            let computedDistSource   = null;
+            const hasAddress = address3 || fullAddress || address1 || address2;
+            if (hasAddress) {
                 const originAddress = fullAddress
                     || [address1, address2, address3].filter(Boolean).join(', ')
                     || address3;
                 const searchAddress = /sri\s*lanka/i.test(originAddress)
                     ? originAddress
                     : `${originAddress}, Sri Lanka`;
-                const calcDist = await calculateDistance(searchAddress);
-                if (calcDist !== null) {
-                    computedDistance = calcDist;
+                const distResult = await calculateDistance(searchAddress);
+                if (distResult.distanceKm !== null) {
+                    computedDistance    = distResult.distanceKm;
+                    computedDurationSec  = distResult.durationSec;
+                    computedDurationText = distResult.durationText;
+                    computedDistSource   = distResult.source;
+                    console.log(`[updateStudent] ${id} → ${computedDistance} km (${computedDurationText || 'n/a'}) via ${computedDistSource}`);
                 }
             }
 
@@ -856,22 +953,18 @@ const StudentController = {
                 id,
                 {
                     name,
-                    title,
-                    lastName,
-                    initials,
-                    fullName,
                     alDistrict,
                     sex: normalizeGender(sex),
-                    medium,
                     address1,
                     address2,
                     address3,
                     fullAddress,
-                    phone1,
-                    phone2,
                     intake,
                     dateOfEnrolment,
-                    distance: computedDistance
+                    distance:            computedDistance,
+                    transitDurationSec:  computedDurationSec,
+                    transitDurationText: computedDurationText,
+                    distanceSource:      computedDistSource,
                 },
                 { new: true }
             );

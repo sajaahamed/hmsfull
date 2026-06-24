@@ -154,6 +154,7 @@ const RoomController = {
                         await room.save();
 
                         student.isAssign = true;
+                        student.hostelAssignedDate = new Date();
                         await student.save();
 
                         allocation.roomId = room._id;  // Assign room to allocation

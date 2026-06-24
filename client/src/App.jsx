@@ -22,6 +22,8 @@ import Students from './pages/Students/Students'
 import StdCreateManually from './pages/Students/StdCreateManually'
 import StdCreateSheet from './pages/Students/StdCreateSheet'
 import ViewStudent from './pages/Students/ViewStudent'
+import EligibleStudents from './pages/Students/EligibleStudents'
+import AssignedStudents from './pages/Students/AssignedStudents'
 import Hostels from './pages/Hostels/Hostels'
 import CreateHostel from './pages/Hostels/CreateHostel'
 import ViewHostel from './pages/Hostels/ViewHostel'
@@ -42,6 +44,7 @@ import AssignStdRoomSp from './pages/WardenDash/AssignStdRoomSp'
 import AssignStundetToRoomSp from './pages/WardenDash/AssignStundetToRoomSp'
 import AlreadyAssigned from './pages/WardenDash/AlreadyAssigned'
 import BackupOptions from './pages/BackupOptions/BackupOptions'
+import Reports from './pages/Reports/Reports'
 
 function App() {
     return (
@@ -78,7 +81,8 @@ function App() {
                         <Route path='View-Student/:id' element={<PrivateRoute element={<ViewStudent /> } /> } />
 
                         <Route path='Student-assign' element={<PrivateRoute element={<HostelAssign /> } /> } />
-
+                        <Route path='EligibleStudents' element={<PrivateRoute element={<EligibleStudents /> } /> } />
+                        <Route path='AssignedStudents' element={<PrivateRoute element={<AssignedStudents /> } /> } />
 
                         <Route path='Hostels' element={<PrivateRoute element={<Hostels /> } /> } />
                         <Route path='Create-hostel' element={<PrivateRoute element={<CreateHostel /> } /> } />
@@ -101,6 +105,8 @@ function App() {
                         <Route path='EmergencyContact' element={<PrivateRoute element={<EmergencyContact /> } /> } />
                         <Route path='StdExtraNeeds' element={<PrivateRoute element={<StdExtraNeeds /> } /> } />
                         <Route path='AdminExtraNeeds' element={<PrivateRoute element={<AdminExtraNeeds /> } /> } />
+
+                        <Route path='Reports' element={<PrivateRoute element={<Reports /> } /> } />
 
 
                     </Route>

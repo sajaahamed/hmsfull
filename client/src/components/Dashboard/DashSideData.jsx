@@ -3,6 +3,7 @@ import { FaSchool, FaUserGraduate, FaGear } from "react-icons/fa6";
 import { FaUserCog, FaUsers, FaUserLock, FaMoneyBillWave } from "react-icons/fa";
 import { MdContactEmergency } from "react-icons/md";
 import { FaHouseUser } from "react-icons/fa";
+import { TbReportAnalytics } from "react-icons/tb";
 
 
 const dashsidedata = [
@@ -101,6 +102,24 @@ const dashsidedata = [
         name: 'Backup Options',
         link: '/Dashboard/BackupOptions',
         icon: FaGear
+    },
+    {
+        id: 18,
+        name: 'Eligible Students',
+        link: '/Dashboard/EligibleStudents',
+        icon: FaUserGraduate
+    },
+    {
+        id: 19,
+        name: 'Assigned Students',
+        link: '/Dashboard/AssignedStudents',
+        icon: FaUserGraduate
+    },
+    {
+        id: 20,
+        name: 'Reports',
+        link: '/Dashboard/Reports',
+        icon: TbReportAnalytics
     },
 ]
 

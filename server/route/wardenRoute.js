@@ -41,5 +41,6 @@ router.post('/delete-warden/:id', authMiddleware, checkPermission('manage-warden
 router.post('/collect-payment', authMiddleware, WardenController.collect_payment)
 router.get('/payments', authMiddleware, WardenController.getPayments)
 router.get('/payments/export', authMiddleware, WardenController.exportPayments)
+router.put('/payments/:id/mark-paid', authMiddleware, WardenController.markPaid)
 
 module.exports = router;

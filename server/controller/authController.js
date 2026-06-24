@@ -196,41 +196,50 @@ const authController = {
                     return res.json({ Error: "Student not found for given enrolment number" });
                 }
 
+                // Use enrolmentNo as the username to find the User account
+                const studentUsername = String(student.enrolmentNo || enrolmentNo).trim();
+
                 checkuser = await User.findOne({
                     $or: [
-                        { email: student.email },
+                        { username: studentUsername },
+                        { username: enrolmentNo },
                         { username: student.nic }
                     ]
                 }).populate('roles');
 
                 if (!checkuser) {
+                    // Auto-create a User account for the student
                     const studentRole = await Role.findOne({ name: 'student' });
                     if (!studentRole) {
                         return res.json({ Error: "Student role not found" });
                     }
 
-                    const fallbackUsername = String(enrolmentNo || student.enrolmentNo || student.nic || student.no || '').trim();
-                    if (!fallbackUsername) {
+                    if (!studentUsername) {
                         return res.json({ Error: "Student username cannot be determined" });
                     }
 
-                    const studentEmail = String(student.email || '').trim();
-                    if (!studentEmail) {
-                        return res.json({ Error: "Student email is missing" });
+                    // Generate a synthetic email since User model requires it
+                    // Students don't have email in their record, so we use enrolmentNo-based placeholder
+                    const syntheticEmail = `${studentUsername.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}@student.hms`;
+
+                    // Check if this synthetic email already exists
+                    const existingByEmail = await User.findOne({ email: syntheticEmail }).populate('roles');
+                    if (existingByEmail) {
+                        checkuser = existingByEmail;
+                    } else {
+                        const hashedPassword = await bcrypt.hash('12345678', 10);
+                        const newStudentUser = new User({
+                            username: studentUsername,
+                            email: syntheticEmail,
+                            emailVerified: true,
+                            active: true,
+                            password: hashedPassword,
+                            roles: [studentRole._id],
+                        });
+
+                        checkuser = await newStudentUser.save();
+                        checkuser = await User.findById(checkuser._id).populate('roles');
                     }
-
-                    const hashedPassword = await bcrypt.hash('12345678', 10);
-                    const newStudentUser = new User({
-                        username: fallbackUsername,
-                        email: studentEmail,
-                        emailVerified: true,
-                        active: true,
-                        password: hashedPassword,
-                        roles: [studentRole._id],
-                    });
-
-                    checkuser = await newStudentUser.save();
-                    checkuser = await User.findById(checkuser._id).populate('roles');
                 }
 
                 if (!checkuser) {

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react'
-import { FaFemale, FaMale } from 'react-icons/fa'
+import { FaFemale, FaMale, FaUserTie } from 'react-icons/fa'
 import { FaUserGraduate } from 'react-icons/fa6'
 import { FaRoad } from "react-icons/fa6";
 ;
@@ -24,6 +24,7 @@ const StdData = () => {
 
     const maleStudents = allstds.filter(std => std.sex === 'Male')
     const femaleStudents = allstds.filter(std => std.sex === 'Female')
+    const revStudents = allstds.filter(std => std.sex === 'REV')
 
     const stddata = [
         {
@@ -46,6 +47,13 @@ const StdData = () => {
             icon: FaFemale,
             value: femaleStudents.length,
             bgColor: 'bg-[#d4af37]',
+        },
+        {
+            id: 4,
+            name: 'REV Students',
+            icon: FaUserTie,
+            value: revStudents.length,
+            bgColor: 'bg-orange-600',
         },
         // {
         //     id: 4,

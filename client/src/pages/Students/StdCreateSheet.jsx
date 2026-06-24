@@ -37,24 +37,15 @@ const StdCreateSheet = () => {
         const errors = [];
         const get = key => rowObj[key] ?? '';
 
-        if (!String(get('enrolmentno')).trim()) errors.push({ row: rowIndex, col: 'Enrolment No', reason: 'missing' });
-        if (!String(get('name')).trim()) errors.push({ row: rowIndex, col: 'Name', reason: 'missing' });
+        if (!String(get('enrolmentno') || get('enrollmentno')).trim()) errors.push({ row: rowIndex, col: 'Enrolment No', reason: 'missing' });
 
         const sex = String(get('sex')).trim().toLowerCase();
-        if (sex && !['male','female'].includes(sex)) errors.push({ row: rowIndex, col: 'Sex', reason: `invalid value: ${sex}` });
-
-        const email = String(get('email')).trim();
-        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push({ row: rowIndex, col: 'Email', reason: 'invalid email' });
+        if (sex && !['m','male','f','female','rev','reverend'].includes(sex)) errors.push({ row: rowIndex, col: 'Sex', reason: `invalid value: "${get('sex')}". Accepted: M, Male, F, Female, REV, Reverend` });
 
         const nic = String(get('nic')).trim();
         if (nic && !/^[A-Za-z0-9]{5,}$/i.test(nic)) errors.push({ row: rowIndex, col: 'NIC', reason: 'unexpected format' });
 
-        ['phone1','phone2'].forEach(k => {
-            const v = String(get(k)).trim();
-            if (v && !/^\+?\d{6,15}$/.test(v)) errors.push({ row: rowIndex, col: k, reason: 'invalid phone' });
-        });
-
-        const d = get('dateofenrolment');
+        const d = get('dateofenrolment') || get('dateofenrollment');
         if (d) {
             const parsed = new Date(d);
             if (isNaN(parsed.getTime())) errors.push({ row: rowIndex, col: 'Date of Enrolment', reason: 'invalid date' });
@@ -81,10 +72,9 @@ const StdCreateSheet = () => {
         const headerMap = {};
         rawHeaders.forEach((h, i) => headerMap[ normalizeHeader(h) ] = i);
 
-        const required = ['enrolmentno','name'];
-        const missingRequired = required.filter(r => !(r in headerMap));
-        if (missingRequired.length) {
-            return { ok: false, error: 'missing required headers', missingHeaders: missingRequired };
+        const hasEnrolmentHeader = ('enrolmentno' in headerMap) || ('enrollmentno' in headerMap);
+        if (!hasEnrolmentHeader) {
+            return { ok: false, error: 'missing required headers', missingHeaders: ['Enrolment No'] };
         }
 
         const rowErrors = [];
@@ -143,10 +133,12 @@ const StdCreateSheet = () => {
             );
 
             if (res.data.Status === "Success") {
-                alert(res.data.Message);
+                const inserted = res.data.insertedCount ?? 0;
+                const duplicated = res.data.duplicateCount ?? 0;
+                alert(`${res.data.Message}\n\n- Successfully imported: ${inserted} students\n- Skipped (already exist): ${duplicated} students`);
                 navigate('/Dashboard/Students');
             } else {
-                alert(res.data.Error);
+                alert(res.data.Error || "Upload failed");
             }
         } catch (err) {
             console.error(err);

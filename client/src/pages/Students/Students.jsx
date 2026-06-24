@@ -1,16 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { FaUserGraduate } from 'react-icons/fa6'
 import StdData from './StdData'
 import DefaultBtn from '../../components/Buttons/DefaultBtn'
 import { Link } from 'react-router-dom'
 import AllStudents from './AllStudents'
 
-import axios from 'axios'
-
-
 const Students = () => {
-    const token = localStorage.getItem('login')
-
     return (
         <div>
             <h1 className="font-bold text-[#6b0f14] text-xl">Manage Students</h1>

@@ -1,8 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { FaMale, FaFemale } from 'react-icons/fa';
+import { FaMale, FaFemale, FaDownload } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
-;
 
 const AllHostelData = () => {
     const [allhostels, setAllHostels] = useState([]);
@@ -42,7 +41,9 @@ const AllHostelData = () => {
 
     return (
         <div>
-            <h2 className="text-lg font-semibold text-[#6b0f14] mb-6">Hostels</h2>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-semibold text-[#6b0f14]">Hostels</h2>
+            </div>
             
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

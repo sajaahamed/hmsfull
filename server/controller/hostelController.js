@@ -278,6 +278,16 @@ const HostelController = {
             // Fetch students before proceeding
             const students = await Student.find({ _id: { $in: studentIds } });
 
+            // Check eligibility: students must have eligibilityStatus='Eligible' (or true for legacy) and isAssign=false
+            const ineligibleStudent = students.find(s => (s.eligibilityStatus !== 'Eligible' && s.eligibilityStatus !== true) || s.isAssign);
+            if (ineligibleStudent) {
+                const reason = ineligibleStudent.isAssign ? 'already assigned' : 'not eligible';
+                return res.json({
+                    Status: "Error",
+                    Message: `Student ${ineligibleStudent.name || ineligibleStudent.enrolmentNo || 'Unknown'} is ${reason} for hostel assignment.`
+                });
+            }
+
             // Check gender match
             const mismatch = students.find(
                 student => (student.sex || '').toLowerCase() !== (hostel.gender || '').toLowerCase()
@@ -290,7 +300,9 @@ const HostelController = {
                 });
             }
 
-            const totalCapacity = hostel.roomCount * hostel.roomCapacity;
+            // Calculate actual capacity from rooms
+            const rooms = await Room.find({ hostelID: hostelId });
+            const totalCapacity = rooms.reduce((sum, room) => sum + (room.capasity || 4), 0);
 
             const existingAllocationsCount = await Allocation.countDocuments({
                 hostelID: hostelId,
@@ -301,14 +313,15 @@ const HostelController = {
             const newAllocationsCount = studentIds.length;
 
             if (existingAllocationsCount + newAllocationsCount > totalCapacity) {
-                return res.json({ Error: "Gender Mismatch" });
+                return res.json({ Status: "Error", Message: "Hostel Capacity Exceeded" });
             }
 
             // Create allocations
             const allocations = studentIds.map(studentId => ({
                 regNo: studentId,
+                studentId: studentId,
                 hostelID: hostelId,
-                academicYear: new Date().getFullYear().toString(),  // Store as string
+                academicYear: new Date().getFullYear().toString(),
                 inDate: new Date(),
                 active: true,
             }));
@@ -318,7 +331,7 @@ const HostelController = {
             // Mark students as assigned
             await Student.updateMany(
                 { _id: { $in: studentIds } },
-                { $set: { isAssign: true } }
+                { $set: { isAssign: true, hostelAssignedDate: new Date(), eligibilityStatus: 'Assigned' } }
             );
 
             // Get role document for 'student'
@@ -328,13 +341,18 @@ const HostelController = {
             }
 
             for (const student of students) {
-                const existingUser = await User.findOne({ username: student.nic });
+                const usernameVal = student.enrolmentNo || student.nic;
+                if (!usernameVal) continue;
+                
+                const existingUser = await User.findOne({ username: usernameVal });
                 if (!existingUser) {
-                    const hashedPassword = await bcrypt.hash('12345678', 10); // Load from .env if needed
+                    const hashedPassword = await bcrypt.hash('12345678', 10);
+                    
+                    const syntheticEmail = `${usernameVal.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@student.hms.local`;
 
                     const newUser = new User({
-                        username: student.nic,
-                        email: student.email,
+                        username: usernameVal,
+                        email: student.email || syntheticEmail,
                         emailVerified: true,
                         password: hashedPassword,
                         roles: [studentRole._id],

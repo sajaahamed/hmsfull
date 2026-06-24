@@ -36,7 +36,7 @@ const Dashboard = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-            <div className="xl:flex">
+            <div className="xl:flex relative">
                 {/* Sidebar */}
                 <aside
                     className={`fixed top-0 left-0 h-full shadow-lg z-50 w-[260px]
@@ -45,26 +45,22 @@ const Dashboard = () => {
                     ${sideOpen ? 'translate-x-0' : '-translate-x-full'}`}
                     style={{ background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)' }}
                 >
-                    <DashSide />
+                    <DashSide toggleSide={toggleSide} />
                 </aside>
 
-                {/* Sidebar Toggle Button */}
-                <button
-                    aria-label={sideOpen ? 'Close menu' : 'Open menu'}
-                    className="fixed top-6 left-3 z-60 p-2 rounded-md text-white xl:hidden shadow-lg transition"
-                    style={{ background: '#6b0f14' }}
-                    onClick={toggleSide}
-                >
-                    {sideOpen ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    ) : (
+                {/* Sidebar Toggle Button (Hamburger only shown when closed) */}
+                {!sideOpen && (
+                    <button
+                        aria-label="Open menu"
+                        className="absolute top-6 left-3 z-60 p-2 rounded-md text-white xl:hidden shadow-lg transition"
+                        style={{ background: '#6b0f14' }}
+                        onClick={toggleSide}
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
-                    )}
-                </button>
+                    </button>
+                )}
 
                 {/* Main Content */}
                 <main className="flex-1 xl:ml-[260px] min-h-screen flex flex-col">

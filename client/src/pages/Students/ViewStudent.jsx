@@ -1,7 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, Navigate } from 'react-router-dom';
-;
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
 import DefaultInput from '../../components/Form/DefaultInput';
 import { getUserInfoFromToken } from '../../utils/auth';
@@ -87,44 +86,28 @@ const ViewStudent = () => {
                     <Detail label="Enrolment No" value={stdData.enrolmentNo} />
                     <Detail label="NIC" value={stdData.nic} />
                     <Detail label="Name" value={stdData.name} />
-                    <Detail label="Title" value={stdData.title} />
-                    <Detail label="Last Name" value={stdData.lastName} />
-                    <Detail label="Initials" value={stdData.initials} />
-                    <Detail label="Full Name" value={stdData.fullName} />
                     <Detail label="AL District" value={stdData.alDistrict} />
                     <Detail label="Sex" value={stdData.sex} />
-                    
-                    <Detail label="Medium" value={stdData.medium} />
                     <Detail label="Address 1" value={stdData.address1} />
                     <Detail label="Address 2" value={stdData.address2} />
                     <Detail label="Address 3" value={stdData.address3} />
                     <Detail label="Full Address" value={stdData.fullAddress} />
-                    <Detail label="Email" value={stdData.email} />
-                    <Detail label="Phone 1" value={stdData.phone1} />
-                    <Detail label="Phone 2" value={stdData.phone2} />
                     <Detail label="Intake" value={stdData.intake} />
                     <Detail label="Date of Enrolment" value={new Date(stdData.dateOfEnrolment).toLocaleDateString()} />
+                    <Detail label="Study Year" value={stdData.dateOfEnrolment ? `Year ${(new Date().getFullYear() - new Date(stdData.dateOfEnrolment).getFullYear()) + 1}` : ''} />
                     <Detail label="Distance" value={stdData.distance + ' km'} />
                     <Detail label="Assigned" value={stdData.isAssign ? 'Yes' : 'No'} />
+                    {stdData.hostelAssignedDate && <Detail label="Assigned Date" value={new Date(stdData.hostelAssignedDate).toLocaleDateString()} />}
                 </div>
             ) : (
                 <form onSubmit={handleUpdate} className="grid md:grid-cols-2 gap-4 text-sm">
                     {[ // Editable fields
                         { name: 'name', label: 'Name' },
-                        { name: 'title', label: 'Title' },
-                        { name: 'lastName', label: 'Last Name' },
-                        { name: 'initials', label: 'Initials' },
-                        { name: 'fullName', label: 'Full Name' },
                         { name: 'alDistrict', label: 'AL District' },
-                        
-                        { name: 'medium', label: 'Medium' },
                         { name: 'address1', label: 'Address 1' },
                         { name: 'address2', label: 'Address 2' },
                         { name: 'address3', label: 'Address 3' },
                         { name: 'fullAddress', label: 'Full Address' },
-                        { name: 'phone1', label: 'Phone 1' },
-                        { name: 'phone2', label: 'Phone 2' },
-                        
                         { name: 'intake', label: 'Intake' },
                         { name: 'dateOfEnrolment', label: 'Date of Enrolment', type: 'date' },
                         { name: 'distance', label: 'Distance (km)', type: 'number' }

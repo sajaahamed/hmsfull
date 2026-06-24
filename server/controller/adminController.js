@@ -5,110 +5,125 @@ const SpecialNeeds = require("../model/SpecialNeeds");
 const XLSX = require('xlsx');
 
 const AdminController = {
-    // Admin: Get all payments (read-only)
+    // Admin: Get all students in hostel(s) with their payment status
     getPayments: async (req, res) => {
         try {
             const { hostelId } = req.query;
 
-            let payments;
-
+            // Build allocation query — filter by hostel if provided
+            const allocQuery = { active: true };
             if (hostelId) {
-                // Find active allocations for the hostel
-                const allocations = await Allocation.find({ hostelID: hostelId, active: true });
-
-                // Collect student ObjectIds from allocations (if stored) and regNos otherwise.
-                // NOTE: Some legacy data stores Student _id (24-hex) as a string in Allocation.regNo.
-                const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-
-                const objectIds = allocations
-                    .filter(a => a.studentId)
-                    .map(a => (a.studentId.toString ? a.studentId.toString() : String(a.studentId)));
-
-                const regNosRaw = allocations
-                    .filter(a => !a.studentId && a.regNo)
-                    .map(a => String(a.regNo));
-
-                const regNoObjectIds = regNosRaw.filter(v => objectIdPattern.test(v));
-                const enrolmentNos = regNosRaw.filter(v => !objectIdPattern.test(v));
-
-                // Resolve enrolmentNos to Student _id where possible
-                let resolvedIds = [];
-                if (enrolmentNos.length) {
-                    const students = await Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('_id enrolmentNo');
-                    const map = {};
-                    students.forEach(s => { map[s.enrolmentNo] = s._id; });
-                    resolvedIds = enrolmentNos.map(r => map[r]).filter(Boolean);
-                }
-
-                const studentIds = Array.from(new Set([
-                    ...objectIds,
-                    ...regNoObjectIds,
-                    ...resolvedIds.map(id => id.toString())
-                ]));
-
-                if (studentIds.length > 0) {
-                    payments = await Payment.find({ studentId: { $in: studentIds } })
-                        .populate('studentId', 'fullName enrolmentNo nic no _id')
-                        .sort({ paidDate: -1 });
-                } else {
-                    // If no allocations, return empty
-                    payments = [];
-                }
-            } else {
-                // Return all payments when no hostel filter provided
-                payments = await Payment.find()
-                    .populate('studentId', 'fullName enrolmentNo nic no _id')
-                    .sort({ paidDate: -1 });
+                allocQuery.hostelID = hostelId;
             }
 
-            // Map allocations to room numbers for the returned payments
-            const studentIdsForLookup = payments.map(p => (p.studentId && p.studentId._id) ? p.studentId._id.toString() : (p.studentId ? p.studentId.toString() : null)).filter(Boolean);
+            // Fetch ALL active allocations with student, room and hostel details
+            const allocs = await Allocation.find(allocQuery)
+                .populate('roomId')
+                .populate('hostelID')
+                .populate('studentId', 'fullName enrolmentNo name nic no _id');
 
-            const allocs = await Allocation.find({
-                $or: [ { regNo: { $in: studentIdsForLookup } }, { studentId: { $in: studentIdsForLookup } } ],
-                active: true
-            }).populate('roomId').populate('hostelID');
-
-            const allocMap = {};
+            // Collect student ObjectIds and Enrolment Numbers
+            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+            const enrolmentNos = [];
+            const objectIdsFromRegNo = [];
+            
             allocs.forEach(a => {
-                const sid = a.studentId ? (a.studentId.toString ? a.studentId.toString() : a.studentId) : (a.regNo ? a.regNo.toString() : null);
-                if (!sid) return;
-                allocMap[sid] = {
-                    roomNo: a.roomId && a.roomId.roomID ? a.roomId.roomID : null,
-                    hostelName: a.hostelID && a.hostelID.name ? a.hostelID.name : null
-                };
-            });
-
-            const paymentsWithRoom = payments.map(p => {
-                const pObj = p.toObject ? p.toObject() : p;
-                let roomNo = null;
-                let hostelName = null;
-                
-                // Try to find room and hostel using studentId first
-                if (pObj.studentId && pObj.studentId._id) {
-                    const studentIdStr = pObj.studentId._id.toString();
-                    if (allocMap[studentIdStr]) {
-                        roomNo = allocMap[studentIdStr].roomNo || null;
-                        hostelName = allocMap[studentIdStr].hostelName || null;
+                if (!a.studentId && a.regNo) {
+                    const val = String(a.regNo);
+                    if (objectIdPattern.test(val)) {
+                        objectIdsFromRegNo.push(val);
+                    } else {
+                        enrolmentNos.push(val);
                     }
                 }
-                
-                // Fallback: try using enrollment number if studentId lookup failed
-                if (!roomNo && pObj.studentId && pObj.studentId.enrolmentNo) {
-                    if (allocMap[pObj.studentId.enrolmentNo]) {
-                        roomNo = allocMap[pObj.studentId.enrolmentNo].roomNo || null;
-                        hostelName = allocMap[pObj.studentId.enrolmentNo].hostelName || null;
-                    }
-                }
-                
-                pObj.roomNo = roomNo;
-                pObj.hostelName = hostelName;
-                return pObj;
             });
 
-            const total = paymentsWithRoom.reduce((s, p) => s + (p.amount || 0), 0);
+            // Resolve legacy string regNos to Student objects
+            const studentMap = {};
+            
+            const promises = [];
+            if (enrolmentNos.length > 0) {
+                promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id'));
+            }
+            if (objectIdsFromRegNo.length > 0) {
+                promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id'));
+            }
+            
+            const studentResults = await Promise.all(promises);
+            const flatStudents = studentResults.flat();
+            
+            flatStudents.forEach(s => {
+                if (s.enrolmentNo) studentMap[s.enrolmentNo] = s;
+                studentMap[s._id.toString()] = s;
+            });
 
-            return res.json({ Status: 'Success', Result: paymentsWithRoom, total });
+            // Collect student IDs from allocations to look up payments
+            const studentIdsToFetch = allocs.map(a => {
+                if (a.studentId && a.studentId._id) return a.studentId._id.toString();
+                if (!a.studentId && a.regNo) {
+                    const val = String(a.regNo);
+                    if (studentMap[val]) return studentMap[val]._id.toString();
+                    if (objectIdPattern.test(val) && studentMap[val]) return studentMap[val]._id.toString();
+                }
+                return null;
+            }).filter(Boolean);
+
+            // Fetch all existing payments for these students
+            let payments = [];
+            if (studentIdsToFetch.length > 0) {
+                payments = await Payment.find({ studentId: { $in: studentIdsToFetch } });
+            }
+
+            // Build a map of studentId -> payment for quick lookup
+            const paymentsMap = {};
+            payments.forEach(p => {
+                const sid = p.studentId ? p.studentId.toString() : null;
+                if (sid) paymentsMap[sid] = p;
+            });
+
+            // Build result: one row per allocation, merged with payment data
+            const results = [];
+            const seenStudentIds = new Set(); // Deduplicate by student ID
+            for (const a of allocs) {
+                // Determine the student object
+                let studentObj = null;
+                let sidStr = null;
+                
+                if (a.studentId && a.studentId._id) {
+                    studentObj = a.studentId;
+                    sidStr = a.studentId._id.toString();
+                } else if (!a.studentId && a.regNo) {
+                    const val = String(a.regNo);
+                    studentObj = studentMap[val] || { enrolmentNo: val, no: val, _id: val };
+                    if (studentMap[val]) {
+                        sidStr = studentMap[val]._id.toString();
+                    } else {
+                        sidStr = val;
+                    }
+                }
+
+                // Skip if we already added this student (prevents duplicates)
+                if (!studentObj || !sidStr || seenStudentIds.has(sidStr)) continue;
+                // Skip entries where enrolmentNo looks like a raw ObjectId (24‑hex chars)
+                if (studentObj.enrolmentNo && /^[0-9a-fA-F]{24}$/.test(studentObj.enrolmentNo)) continue;
+                seenStudentIds.add(sidStr);
+
+                const p = paymentsMap[sidStr] || null;
+
+                results.push({
+                    _id: p ? p._id : a._id,
+                    studentId: studentObj,
+                    hostelName: a.hostelID ? a.hostelID.name : null,
+                    roomNo: a.roomId ? a.roomId.roomID : null,
+                    amount: p ? p.amount : 0,
+                    paidDate: p ? p.paidDate : null,
+                    paymentStatus: p ? (p.paymentStatus || 'Paid') : 'Pending'
+                });
+            }
+
+            const total = results.reduce((s, x) => s + (x.paymentStatus === 'Paid' ? (x.amount || 0) : 0), 0);
+
+            return res.json({ Status: 'Success', Result: results, total });
         } catch (err) {
             console.error('admin getPayments error:', err);
             return res.status(500).json({ Error: 'Server error', details: err.message });

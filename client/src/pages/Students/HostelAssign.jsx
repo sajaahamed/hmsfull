@@ -1,10 +1,17 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import DefaultInput from '../../components/Form/DefaultInput'
 import Dropdown from '../../components/Form/Dropdown'
-import { FaFemale, FaMale } from 'react-icons/fa'
+import { FaFemale, FaMale, FaUserTie } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 
+
+const DEPARTMENT_MAP = {
+    A: 'Arts',
+    LLB: 'Law',
+    GIS: 'Geographical Science',
+    SW: 'Social Work',
+}
 
 const HostelAssign = () => {
     const [getallstudents, setgetallstudents] = useState([])
@@ -14,20 +21,187 @@ const HostelAssign = () => {
         distance: '',
         gender: '',
         intakeYear: '',
+        department: '',
     })
     const token = localStorage.getItem('login')
+
+    const getMainDept = enrolNo => {
+        if (!enrolNo) return ''
+        const parts = enrolNo.split('/').filter(Boolean)
+        return parts[0] || ''
+    }
+
+    const getSubDept = enrolNo => {
+        if (!enrolNo) return ''
+        const parts = enrolNo.split('/').filter(Boolean)
+        if (parts.length >= 4) return parts[2]
+        if (parts.length === 3) return parts[0]
+        return ''
+    }
 
     const getIntakeYearCode = (enrolmentNo) => {
         const parts = String(enrolmentNo ?? '').split('/').filter(Boolean)
         return parts[1] || ''
     }
 
+    const parentSubMap = React.useMemo(() => {
+        const m = new Map()
+            ; (getallstudents || []).forEach(s => {
+                const enrol = s.enrolmentNo || ''
+                const main = getMainDept(enrol)
+                const parts = enrol.split('/').filter(Boolean)
+                const explicitSub = parts.length >= 4 ? parts[2] : ''
+                if (!main) return
+                if (!m.has(main)) m.set(main, new Map())
+
+                if (explicitSub && explicitSub !== main) m.get(main).set(`SUB:${explicitSub}`, { value: `SUB:${explicitSub}`, label: `${explicitSub}`, type: 'sub' })
+                if (parts.length === 3) m.get(main).set(`SUBSHORT:${main}`, { value: `SUBSHORT:${main}`, label: `${main}`, type: 'short' })
+            })
+
+        const out = new Map()
+        for (const [k, innerMap] of m.entries()) {
+            const arr = Array.from(innerMap.values())
+            const priority = t => (t === 'short' ? 0 : t === 'sub' ? 1 : 2)
+            arr.sort((a, b) => {
+                const p = priority(a.type) - priority(b.type)
+                return p !== 0 ? p : a.label.localeCompare(b.label)
+            })
+            out.set(k, arr)
+        }
+        return out
+    }, [getallstudents])
+
+    const DepartmentTree = ({ map, value, onChange }) => {
+        const [open, setOpen] = useState(false)
+        const [expanded, setExpanded] = useState(null)
+        const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
+        const rootRef = useRef(null)
+        const triggerRef = useRef(null)
+
+        const displayLabelForValue = (val) => {
+            if (!val) return ''
+            if (val.startsWith('MAIN:')) return DEPARTMENT_MAP[val.slice(5)] || `${val.slice(5)} (main)`
+            if (val.startsWith('SUB:')) return val.slice(4)
+            if (val.startsWith('SUBSHORT:')) return val.slice(9)
+            return DEPARTMENT_MAP[val] || val
+        }
+
+        const updatePos = () => {
+            if (triggerRef.current) {
+                const rect = triggerRef.current.getBoundingClientRect()
+                setDropdownPos({
+                    top: rect.bottom + window.scrollY + 4,
+                    left: rect.left + window.scrollX,
+                    width: Math.max(rect.width, 192),
+                })
+            }
+        }
+
+        const handleOpen = () => {
+            const next = !open
+            if (next) updatePos()
+            if (!next) setExpanded(null)
+            setOpen(next)
+        }
+
+        useEffect(() => {
+            function handleClick(e) {
+                if (open && rootRef.current && !rootRef.current.contains(e.target)) {
+                    setOpen(false)
+                    setExpanded(null)
+                }
+            }
+            function handleScroll() {
+                if (open) updatePos()
+            }
+            document.addEventListener('mousedown', handleClick)
+            document.addEventListener('touchstart', handleClick)
+            window.addEventListener('scroll', handleScroll, true)
+            return () => {
+                document.removeEventListener('mousedown', handleClick)
+                document.removeEventListener('touchstart', handleClick)
+                window.removeEventListener('scroll', handleScroll, true)
+            }
+        }, [open])
+
+        return (
+            <div className="min-w-[150px] shrink-0" ref={rootRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <div
+                    ref={triggerRef}
+                    role="button"
+                    tabIndex={0}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#6b0f14] focus:border-[#6b0f14] transition flex justify-between items-center cursor-pointer h-[38px]"
+                    onClick={handleOpen}
+                >
+                    <span className="truncate text-sm">{value ? displayLabelForValue(value) : 'All'}</span>
+                    <span className="text-gray-400">▾</span>
+                </div>
+
+                {open && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: dropdownPos.top,
+                            left: dropdownPos.left,
+                            width: dropdownPos.width,
+                            zIndex: 9999,
+                        }}
+                        className="max-h-56 overflow-auto bg-white border rounded shadow-lg ring-1 ring-black ring-opacity-5"
+                    >
+                        <div
+                            className="px-2 py-1 hover:bg-gray-50 cursor-pointer text-xs"
+                            onClick={() => { onChange(''); setOpen(false); setExpanded(null); }}
+                        >
+                            All Departments
+                        </div>
+                        {Array.from(map.keys()).sort().map(parent => (
+                            <div key={parent}>
+                                <div className={`px-2 py-1 flex justify-between items-center ${map.get(parent).some(s => s.value === value) ? 'bg-gray-100 font-semibold' : 'hover:bg-gray-50'}`}>
+                                    <button
+                                        type="button"
+                                        className="text-left flex-1 truncate px-2 py-0.5 text-xs"
+                                        onClick={() => { setExpanded(expanded === parent ? null : parent); }}
+                                    >
+                                        {DEPARTMENT_MAP[parent] || parent}
+                                    </button>
+                                    {map.get(parent).length > 0 && (
+                                        <button
+                                            type="button"
+                                            className="px-2 text-gray-400 hover:text-gray-600"
+                                            onClick={(e) => { e.stopPropagation(); setExpanded(expanded === parent ? null : parent); }}
+                                        >
+                                            {expanded === parent ? '▾' : '▸'}
+                                        </button>
+                                    )}
+                                </div>
+                                {expanded === parent && map.get(parent).length > 0 && (
+                                    <div className="ml-4 border-l pl-2 bg-white">
+                                        {map.get(parent).map(subObj => (
+                                            <div
+                                                key={subObj.value}
+                                                className={`px-2 py-1 text-xs ${value === subObj.value ? 'bg-gray-100 font-semibold' : 'hover:bg-gray-50'} cursor-pointer`}
+                                                onClick={() => { onChange(subObj.value); setOpen(false); setExpanded(null); }}
+                                            >
+                                                {subObj.label}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     const intakeYearOptions = React.useMemo(() => {
         const years = new Set()
-        ;(getallstudents || []).forEach(s => {
-            const y = getIntakeYearCode(s?.enrolmentNo)
-            if (y) years.add(y)
-        })
+            ; (getallstudents || []).forEach(s => {
+                const y = getIntakeYearCode(s?.enrolmentNo)
+                if (y) years.add(y)
+            })
 
         return Array.from(years)
             .sort()
@@ -41,16 +215,17 @@ const HostelAssign = () => {
     const [selectedHostel, setSelectedHostel] = useState('')
     const [selectedStudents, setSelectedStudents] = useState(new Set())
     const [selectAllVisible, setSelectAllVisible] = useState(false)
-    const [selectCount, setSelectCount] = useState('Custom') // only 'Custom' option allowed
+    const [selectCount, setSelectCount] = useState('Custom')
     const [customSelect, setCustomSelect] = useState('')
 
     useEffect(() => {
-        axios.get(import.meta.env.VITE_APP_API + '/student/get-all-students-auth', {
+        axios.get(import.meta.env.VITE_APP_API + '/eligibility/eligible-for-assignment', {
             headers: { Authorization: `Bearer ${token}` }
         })
             .then(res => {
-                setgetallstudents(res.data.Result)
-                setFilteredStudents(res.data.Result)
+                const students = res.data.Result || []
+                setgetallstudents(students)
+                setFilteredStudents(students)
             })
             .catch(err => console.log(err))
     }, [token])
@@ -69,8 +244,8 @@ const HostelAssign = () => {
         if (filters.search.trim() !== '') {
             const searchTerm = filters.search.toLowerCase()
             filtered = filtered.filter(student =>
-                (student.enrolmentNo?.toLowerCase().includes(searchTerm) ||
-                    student.nic?.toLowerCase().includes(searchTerm))
+            (student.enrolmentNo?.toLowerCase().includes(searchTerm) ||
+                student.nic?.toLowerCase().includes(searchTerm))
             )
         }
 
@@ -78,7 +253,6 @@ const HostelAssign = () => {
             const distNum = Number(filters.distance)
             if (!isNaN(distNum)) {
                 filtered = filtered.filter(student => Number(student.distance) >= distNum)
-                // Sort by distance descending (big to small)
                 filtered = filtered.sort((a, b) => Number(b.distance || 0) - Number(a.distance || 0))
             }
         }
@@ -91,16 +265,32 @@ const HostelAssign = () => {
             filtered = filtered.filter(student => getIntakeYearCode(student.enrolmentNo) === filters.intakeYear)
         }
 
+        if (filters.department !== '') {
+            filtered = filtered.filter(student => {
+                let matchesDepartment = false
+                if (filters.department.startsWith('MAIN:')) {
+                    const mainCode = filters.department.slice(5)
+                    matchesDepartment = getMainDept(student.enrolmentNo) === mainCode
+                } else if (filters.department.startsWith('SUB:')) {
+                    const subCode = filters.department.slice(4)
+                    matchesDepartment = getSubDept(student.enrolmentNo) === subCode
+                } else if (filters.department.startsWith('SUBSHORT:')) {
+                    const mainCode = filters.department.slice(9)
+                    const parts = (student.enrolmentNo || '').split('/').filter(Boolean)
+                    matchesDepartment = getMainDept(student.enrolmentNo) === mainCode && parts.length === 3
+                } else {
+                    matchesDepartment = getMainDept(student.enrolmentNo) === filters.department || getSubDept(student.enrolmentNo) === filters.department
+                }
+                return matchesDepartment
+            })
+        }
+
         setFilteredStudents(filtered)
     }, [filters, getallstudents])
 
-    // compute visible students (not assigned)
-    const visibleStudents = filteredStudents.filter(student => student.isAssign === false)
-
-    // determine how many to select (number)
+    const visibleStudents = filteredStudents
 
     useEffect(() => {
-        // update selectAllVisible when visibleStudents or selection changes
         const allSelected = visibleStudents.length > 0 && visibleStudents.every(s => selectedStudents.has(s._id))
         setSelectAllVisible(allSelected)
     }, [visibleStudents, selectedStudents])
@@ -189,12 +379,13 @@ const HostelAssign = () => {
             .then(() => {
                 alert('Students assigned successfully!')
                 setSelectedStudents(new Set())
-                axios.get(import.meta.env.VITE_APP_API + '/student/get-all-students-auth', {
+                axios.get(import.meta.env.VITE_APP_API + '/eligibility/eligible-for-assignment', {
                     headers: { Authorization: `Bearer ${token}` }
                 })
                     .then(res => {
-                        setgetallstudents(res.data.Result)
-                        setFilteredStudents(res.data.Result)
+                        const students = res.data.Result || []
+                        setgetallstudents(students)
+                        setFilteredStudents(students)
                     })
             })
             .catch(err => {
@@ -207,7 +398,7 @@ const HostelAssign = () => {
         <div>
             <h1 className="font-bold text-[#6b0f14] text-xl">Assign Students to Hostels</h1>
 
-            <div className="flex flex-nowrap gap-4 mt-4 max-w-4xl overflow-x-auto no-scrollbar">
+            <div className="flex flex-nowrap gap-4 mt-4 max-w-5xl overflow-x-auto no-scrollbar pb-2">
                 <div className="flex-grow min-w-[250px]">
                     <DefaultInput
                         label="Search Enrolment No / NIC"
@@ -218,6 +409,12 @@ const HostelAssign = () => {
                     />
                 </div>
 
+                <DepartmentTree
+                    map={parentSubMap}
+                    value={filters.department}
+                    onChange={(val) => setFilters(prev => ({ ...prev, department: val }))}
+                />
+
                 <div className="min-w-[150px] shrink-0">
                     <Dropdown
                         label="Gender"
@@ -227,6 +424,7 @@ const HostelAssign = () => {
                         options={[
                             { label: 'Male', value: 'Male' },
                             { label: 'Female', value: 'Female' },
+                            { label: 'REV', value: 'REV' },
                         ]}
                     />
                 </div>
@@ -304,7 +502,6 @@ const HostelAssign = () => {
                             <th className="px-3 sm:px-6 py-3 font-semibold">Select</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">#</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">Enrolment No</th>
-                            
                             <th className="hidden md:table-cell px-6 py-3 font-semibold">NIC</th>
                             <th className="px-3 sm:px-6 py-3 font-semibold">Gender</th>
                             <th className="hidden md:table-cell px-6 py-3 font-semibold">Home Town</th>
@@ -317,54 +514,56 @@ const HostelAssign = () => {
                         {
                             visibleStudents.length > 0 ? (
                                 visibleStudents.map((data, index) => (
-                                        <tr
-                                            key={data._id}
-                                            onClick={() => handleCheckboxChange(data._id)}
-                                            className={`transition-all duration-150 cursor-pointer ${
-                                                selectedStudents.has(data._id)
-                                                    ? 'bg-[#fdf6e3] text-[#3a0709]'
-                                                    : 'hover:bg-[#fefaf0]'
+                                    <tr
+                                        key={data._id}
+                                        onClick={() => handleCheckboxChange(data._id)}
+                                        className={`transition-all duration-150 cursor-pointer ${selectedStudents.has(data._id)
+                                                ? 'bg-[#fdf6e3] text-[#3a0709]'
+                                                : 'hover:bg-[#fefaf0]'
                                             }`}
-                                        >
-                                            <td className="px-3 sm:px-6 py-3">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedStudents.has(data._id)}
-                                                    onChange={(e) => {
-                                                        e.stopPropagation()
-                                                        handleCheckboxChange(data._id)
-                                                    }}
-                                                    disabled={data.isAssign}
-                                                    className="h-4 w-4"
-                                                />
-                                            </td>
-                                            <td className="px-3 sm:px-6 py-3 font-medium text-gray-800">{index + 1}</td>
-                                            <td className="px-3 sm:px-6 py-3 truncate">{data.enrolmentNo}</td>
-                                            
-                                            <td className="hidden md:table-cell px-6 py-3 truncate">{data.nic}</td>
-                                            <td className="px-3 sm:px-6 py-3">
-                                                {data.sex === 'Male' ? (
-                                                    <span className="flex uppercase bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-2 py-1 rounded-full items-center">
-                                                        <FaMale className='h-4 w-auto mr-1' /> Male
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex uppercase bg-pink-100 text-pink-700 text-xs font-semibold px-2 py-1 rounded-full items-center">
-                                                        <FaFemale className='h-4 w-auto mr-1' /> Female
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="hidden md:table-cell px-6 py-3 truncate">{data.address3}</td>
-                                            <td className="px-3 sm:px-6 py-3">{data.distance} Km</td>
-                                            <td className="hidden md:table-cell px-6 py-3">
-                                                <span className="uppercase bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full">
-                                                    Not-Assigned
+                                    >
+                                        <td className="px-3 sm:px-6 py-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedStudents.has(data._id)}
+                                                onChange={(e) => {
+                                                    e.stopPropagation()
+                                                    handleCheckboxChange(data._id)
+                                                }}
+                                                disabled={data.isAssign}
+                                                className="h-4 w-4"
+                                            />
+                                        </td>
+                                        <td className="px-3 sm:px-6 py-3 font-medium text-gray-800">{index + 1}</td>
+                                        <td className="px-3 sm:px-6 py-3 truncate">{data.enrolmentNo}</td>
+                                        <td className="hidden md:table-cell px-6 py-3 truncate">{data.nic}</td>
+                                        <td className="px-3 sm:px-6 py-3">
+                                            {data.sex === 'Male' ? (
+                                                <span className="flex uppercase bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-2 py-1 rounded-full items-center">
+                                                    <FaMale className='h-4 w-auto mr-1' /> Male
                                                 </span>
-                                            </td>
-                                            <td className="px-3 sm:px-6 py-3">
-                                                <Link to={`/Dashboard/View-Student/${data._id}`} className="text-[#6b0f14] font-medium hover:underline">View</Link>
-                                            </td>
-                                        </tr>
-                                    ))
+                                            ) : data.sex === 'Female' ? (
+                                                <span className="flex uppercase bg-pink-100 text-pink-700 text-xs font-semibold px-2 py-1 rounded-full items-center">
+                                                    <FaFemale className='h-4 w-auto mr-1' /> Female
+                                                </span>
+                                            ) : (
+                                                <span className="flex uppercase bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-1 rounded-full items-center">
+                                                    <FaUserTie className='h-4 w-auto mr-1' /> {data.sex || 'REV'}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="hidden md:table-cell px-6 py-3 truncate">{data.address3}</td>
+                                        <td className="px-3 sm:px-6 py-3">{data.distance} Km</td>
+                                        <td className="hidden md:table-cell px-6 py-3">
+                                            <span className="uppercase bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full">
+                                                Not-Assigned
+                                            </span>
+                                        </td>
+                                        <td className="px-3 sm:px-6 py-3">
+                                            <Link to={`/Dashboard/View-Student/${data._id}`} className="text-[#6b0f14] font-medium hover:underline">View</Link>
+                                        </td>
+                                    </tr>
+                                ))
                             ) : (
                                 <tr>
                                     <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No matching records found.</td>
@@ -374,8 +573,6 @@ const HostelAssign = () => {
                     </tbody>
                 </table>
             </div>
-
-            
         </div>
     )
 }

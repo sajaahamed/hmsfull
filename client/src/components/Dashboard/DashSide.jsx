@@ -5,7 +5,7 @@ import { dashsidedata } from './DashSideData';
 import uoplogo from '../../assets/uoplogo.png';
 import DashUser from '../../assets/new_profilePic.jpg';
 
-const DashSide = () => {
+const DashSide = ({ toggleSide }) => {
     const [activeMenu, setActiveMenu] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
@@ -20,13 +20,13 @@ const DashSide = () => {
     // Filter menu based on role
     const filteredMenu = dashsidedata.filter(item => {
         if (roleNames.includes('admin') || roleNames.includes('director')) {
-            return ![3, 5, 7, 12, 13, 14].includes(item.id); 
+            return ![3, 5, 7, 12, 13, 14].includes(item.id);
         }
         if (roleNames.includes('warden')) {
-            return ![2, 4, 6, 9, 10, 11, 12, 13, 16, 17].includes(item.id); 
+            return ![2, 4, 6, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20].includes(item.id);
         }
         if (roleNames.includes('student')) {
-            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17].includes(item.id); 
+            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20].includes(item.id);
         }
         return false; // All others get no menu
     });
@@ -72,8 +72,19 @@ const DashSide = () => {
                 overflow-y-auto scrollbar-modern transition-all duration-300"
             style={{ background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)', color: '#fff', borderRight: '1px solid rgba(212,175,55,0.15)' }}
         >
-            <div className="mb-6 flex justify-center">
+            <div className="relative mb-6 flex justify-center items-center">
                 <img src={uoplogo} alt="University of Peradeniya Logo" className="h-14 object-contain" />
+                {toggleSide && (
+                    <button
+                        onClick={toggleSide}
+                        className="absolute -top-3 -right-3 xl:hidden p-0.5 bg-black/10 hover:bg-black/20 rounded-md transition"
+                        aria-label="Close sidebar"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
             </div>
 
             <h2 className="text-center text-xs font-extrabold tracking-widest mb-4 select-none" style={{ color: '#d4af37' }}>
