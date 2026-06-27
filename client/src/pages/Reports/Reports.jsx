@@ -112,7 +112,7 @@ const Reports = () => {
         });
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Hostel Distribution');
+        const worksheet = workbook.addWorksheet('Hall Wise Summery');
 
         const row1 = ['Faculty', 'Batch'];
         if (maleHostels.length > 0) { row1.push('Male Hostels'); for (let i = 1; i < maleHostels.length; i++) row1.push(''); }
@@ -124,7 +124,7 @@ const Reports = () => {
         femaleHostels.forEach(h => row2.push(h.name));
         row2.push('');
 
-        worksheet.addRow([`Hostel Distribution Report - Generated ${new Date().toLocaleDateString()}`]);
+        worksheet.addRow([`Hall Wise Summery Report - Generated ${new Date().toLocaleDateString()}`]);
         worksheet.addRow([]);
         worksheet.addRow(row1);
         worksheet.addRow(row2);
@@ -154,7 +154,7 @@ const Reports = () => {
         applyStylesToWorksheet(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Distribution_Report.xlsx');
+        saveAs(new Blob([buffer]), 'Hall_Wise_Summery_Report.xlsx');
     };
 
     // ── 2. Capacity Report ────────────────────────────────────────────
@@ -162,7 +162,7 @@ const Reports = () => {
         const hostels = await fetchHostels();
         const rows = [];
         let grandRooms = 0, grandMale = 0, grandFemale = 0;
-        
+
         hostels.forEach(h => {
             const rooms = h.roomCount || 0;
             const maleCap = h.gender === 'Male' ? rooms * 2 : 0;
@@ -172,20 +172,20 @@ const Reports = () => {
         });
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Capacity Summary');
+        const worksheet = workbook.addWorksheet('Hostel Details & Capacity');
 
-        worksheet.addRow([`Hostel Capacity Summary Report - Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`]);
+        worksheet.addRow([`Hostel Details & Capacity Report - Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`]);
         worksheet.addRow([]);
         worksheet.addRow(['Hostel Name', 'No of Rooms', 'Capacity', '', '']);
         worksheet.addRow(['', '', 'Male', 'Female', 'Total']);
         rows.forEach(r => worksheet.addRow(r));
         worksheet.addRow(['Grand Total', grandRooms, grandMale, grandFemale, grandMale + grandFemale]);
 
-        worksheet.mergeCells(1, 1, 1, 5); 
-        worksheet.mergeCells(3, 1, 4, 1); 
-        worksheet.mergeCells(3, 2, 4, 2); 
-        worksheet.mergeCells(3, 3, 3, 5); 
-        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 1); 
+        worksheet.mergeCells(1, 1, 1, 5);
+        worksheet.mergeCells(3, 1, 4, 1);
+        worksheet.mergeCells(3, 2, 4, 2);
+        worksheet.mergeCells(3, 3, 3, 5);
+        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 1);
 
         worksheet.columns = [
             { width: 25 }, { width: 15 }, { width: 12 }, { width: 12 }, { width: 12 }
@@ -194,7 +194,7 @@ const Reports = () => {
         applyStylesToWorksheet(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Capacity_Summary_Report.xlsx');
+        saveAs(new Blob([buffer]), 'Hostel_Details_&_Capacity__Report.xlsx');
     };
 
     // ── 3. Financial Report ───────────────────────────────────────────
@@ -233,7 +233,7 @@ const Reports = () => {
         });
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Financial Breakdown');
+        const worksheet = workbook.addWorksheet('Faculty Wise Hostel Summery');
 
         const row1 = ['Hostel Name'];
         departments.forEach(d => { row1.push(d); row1.push(''); });
@@ -243,7 +243,7 @@ const Reports = () => {
         departments.forEach(() => row2.push('M', 'F'));
         row2.push('', '');
 
-        worksheet.addRow([`Hostel Academic & Financial Breakdown - Generated ${new Date().toLocaleDateString()}`]);
+        worksheet.addRow([`Faculty Wise Hostel Summery - Generated ${new Date().toLocaleDateString()}`]);
         worksheet.addRow([]);
         worksheet.addRow(row1);
         worksheet.addRow(row2);
@@ -283,7 +283,7 @@ const Reports = () => {
         applyStylesToWorksheet(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Financial_Report.xlsx');
+        saveAs(new Blob([buffer]), 'Faculty_Wise_Hostel_Summery_Report.xlsx');
     };
 
     // ── 4. Eligibility & Allocation Report ────────────────────────────
@@ -331,9 +331,9 @@ const Reports = () => {
         });
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Eligibility & Allocation');
+        const worksheet = workbook.addWorksheet('HOSTEL Facillity Allocation and Student Satisfaction');
 
-        worksheet.addRow(['HOSTEL ELIGIBILITY AND ALLOCATION SUMMARY REPORT']);
+        worksheet.addRow(['HOSTEL Facillity Allocation and Student Satisfaction']);
         worksheet.addRow([]);
         worksheet.addRow(['Faculty', 'Batch Year', 'Year of Intake', 'Student Registered', 'No. of Students Eligible for Hostel', 'No. of Students Who Received Hostel', '', '']);
         worksheet.addRow(['', '', '', '', '', 'Male', 'Female', 'Total']);
@@ -367,7 +367,7 @@ const Reports = () => {
         applyStylesToWorksheet(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Eligibility_Allocation_Report.xlsx');
+        saveAs(new Blob([buffer]), 'HOSTEL_Facillity_Allocation_and_Student_Satisfaction_Report.xlsx');
     };
 
     // ── 5. Payment Report ────────────────────────────
@@ -377,22 +377,22 @@ const Reports = () => {
         const payments = res.data.Result || res.data.result || [];
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Payment Records');
+        const worksheet = workbook.addWorksheet('Hall List');
 
-        worksheet.addRow([`Hostel Payment Export Report - Generated ${new Date().toLocaleDateString()}`]);
+        worksheet.addRow([`Hall List - Generated ${new Date().toLocaleDateString()}`]);
         worksheet.addRow([]);
-        
+
         const headers = ['No', 'Reg No', 'Enrollment No', 'Hostel', 'Room No', 'Hall Fee', 'Date'];
         worksheet.addRow(headers);
         worksheet.addRow(['', '', '', '', '', '', '']); // Empty row 4 for shared styling compatibility
 
         let totalAmount = 0;
-        
+
         payments.forEach((p, idx) => {
             const dateStr = p.paidDate ? new Date(p.paidDate).toISOString().split('T')[0] : '-';
             const amount = Number(p.amount) || 0;
             totalAmount += amount;
-            
+
             worksheet.addRow([
                 idx + 1,
                 p.studentId?.no || '-',
@@ -407,12 +407,12 @@ const Reports = () => {
         worksheet.addRow(['Grand Total', '', '', '', '', totalAmount, '']);
 
         worksheet.mergeCells(1, 1, 1, 7); // Title
-        
+
         // Merge the two header rows to look like one centered header block
-        for(let i = 1; i <= 7; i++) {
+        for (let i = 1; i <= 7; i++) {
             worksheet.mergeCells(3, i, 4, i);
         }
-        
+
         worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 5); // Total label
 
         worksheet.columns = [
@@ -422,7 +422,7 @@ const Reports = () => {
         applyStylesToWorksheet(worksheet);
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Payments_Report.xlsx');
+        saveAs(new Blob([buffer]), 'Hall_List.xlsx');
     };
 
     const handleDownload = async (type, generatorFn) => {
@@ -440,7 +440,7 @@ const Reports = () => {
     const reportOptions = [
         {
             id: 'distribution',
-            title: 'Hostel Distribution',
+            title: 'Hall Wise Summery',
             description: 'Shows the distribution of students across hostels grouped by their academic department and batch year.',
             icon: Activity,
             color: 'bg-blue-50 text-blue-600',
@@ -448,7 +448,7 @@ const Reports = () => {
         },
         {
             id: 'capacity',
-            title: 'Capacity Summary',
+            title: 'Hostel Details & Capacity',
             description: 'A comprehensive summary of room availability and overall accommodation capacity separated by gender.',
             icon: Building,
             color: 'bg-emerald-50 text-emerald-600',
@@ -456,7 +456,7 @@ const Reports = () => {
         },
         {
             id: 'financial',
-            title: 'Academic & Financial',
+            title: 'Faculty Wise Hostel Summery',
             description: 'Breakdown of allocated students by department inside each hostel, intended for fee and academic analysis.',
             icon: IndianRupee,
             color: 'bg-purple-50 text-purple-600',
@@ -464,7 +464,7 @@ const Reports = () => {
         },
         {
             id: 'eligibility',
-            title: 'Eligibility & Allocation',
+            title: 'Hostel Facillity Allocation and Student Satisfaction',
             description: 'Detailed view of student registrations versus actual hostel eligibility and final room assignments.',
             icon: Users,
             color: 'bg-amber-50 text-amber-600',
@@ -472,7 +472,7 @@ const Reports = () => {
         },
         {
             id: 'payments',
-            title: 'Payment Records',
+            title: 'Hall List',
             description: 'Complete export of all recorded hostel hall fee payments made by assigned students.',
             icon: CreditCard,
             color: 'bg-indigo-50 text-indigo-600',
@@ -505,12 +505,12 @@ const Reports = () => {
                                     {report.description}
                                 </p>
                             </div>
-                            
+
                             <button
                                 onClick={() => handleDownload(report.id, report.action)}
                                 disabled={!!loadingReport}
                                 className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-all
-                                    ${isLoading 
+                                    ${isLoading
                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                         : !!loadingReport
                                             ? 'bg-gray-50 text-gray-300 cursor-not-allowed'

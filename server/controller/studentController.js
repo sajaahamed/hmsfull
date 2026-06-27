@@ -397,7 +397,18 @@ const StudentController = {
             const insertedStudents = [];
             const duplicateStudents = [];
 
+            const uploadId = req.body.uploadId;
+            if (uploadId) {
+                global.uploadProgress = global.uploadProgress || {};
+                global.uploadProgress[uploadId] = { current: 0, total: studentsFromExcel.length };
+            }
+
+            let processedCount = 0;
             for (const s of studentsFromExcel) {
+                processedCount++;
+                if (uploadId) {
+                    global.uploadProgress[uploadId].current = processedCount;
+                }
                 // Normalize header keys (remove non-word chars, lowercase) to tolerate different Excel header names
                 const norm = {};
                 Object.keys(s || {}).forEach(k => {
@@ -508,6 +519,10 @@ const StudentController = {
                 }
             }
 
+            if (uploadId && global.uploadProgress) {
+                delete global.uploadProgress[uploadId];
+            }
+
             res.json({
                 Status: "Success",
                 Message: 'Upload complete',
@@ -518,8 +533,20 @@ const StudentController = {
         }
         catch (err) {
             console.error("Error in createstdviaSheet:", err);
+            const uploadId = req.body && req.body.uploadId;
+            if (uploadId && global.uploadProgress) {
+                delete global.uploadProgress[uploadId];
+            }
             return res.status(500).json({ Status: "Fail", Error: "Internal server error" });
         }
+    },
+
+    getUploadProgress: async (req, res) => {
+        const { uploadId } = req.params;
+        const progress = global.uploadProgress && global.uploadProgress[uploadId] 
+            ? global.uploadProgress[uploadId] 
+            : { current: 0, total: 0 };
+        return res.json({ Status: 'Success', progress });
     },
 
     // Upload Excel and compute student -> university distance using Google Distance Matrix API
@@ -949,6 +976,14 @@ const StudentController = {
                 }
             }
 
+            let editorName = 'Admin';
+            if (req.user && req.user.id) {
+                const adminUser = await User.findById(req.user.id);
+                if (adminUser) {
+                    editorName = adminUser.username || adminUser.email || 'Admin';
+                }
+            }
+
             const updatedStudent = await Student.findByIdAndUpdate(
                 id,
                 {
@@ -965,6 +1000,8 @@ const StudentController = {
                     transitDurationSec:  computedDurationSec,
                     transitDurationText: computedDurationText,
                     distanceSource:      computedDistSource,
+                    lastEditedBy:        editorName,
+                    lastEditedAt:        new Date(),
                 },
                 { new: true }
             );

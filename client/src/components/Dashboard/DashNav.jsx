@@ -1,12 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FaUserCog } from 'react-icons/fa';
-import { FaGear, FaPowerOff } from 'react-icons/fa6';
+import { FaGear, FaPowerOff, FaChevronRight, FaBell } from 'react-icons/fa6';
 import { getUserInfoFromToken } from '../../utils/auth';
 import DashUser from '../../assets/new_profilePic.jpg';
+
+// Derive a readable page title from the current path
+const getPageTitle = (pathname) => {
+    const segment = pathname.split('/').filter(Boolean).pop() || 'Dashboard';
+    return segment
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/[-_]/g, ' ')
+        .trim()
+        .replace(/\b\w/g, c => c.toUpperCase());
+};
 
 const DashNav = () => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
+    const location = useLocation();
 
     const { username, roles } = getUserInfoFromToken() || {};
     const role = roles?.[0]?.name || '';
@@ -15,50 +27,34 @@ const DashNav = () => {
         : [typeof roles === 'string' ? roles : roles?.name].filter(Boolean);
     const canSeeBackup = roleNames.some(r => r === 'admin' || r === 'director');
 
-    // profile image state - read from localStorage or fallback to default
+    const pageTitle = getPageTitle(location.pathname);
+
     const [profileImage, setProfileImage] = useState(() => {
-        try {
-            return localStorage.getItem('profileImage') || DashUser;
-        } catch {
-            return DashUser;
-        }
+        try { return localStorage.getItem('profileImage') || DashUser; }
+        catch { return DashUser; }
     });
 
-    // listen for profile image updates from other parts of the app
     useEffect(() => {
         const handler = (e) => {
             try {
                 const img = e?.detail || localStorage.getItem('profileImage') || DashUser;
                 setProfileImage(img);
-            } catch {
-                setProfileImage(DashUser);
-            }
+            } catch { setProfileImage(DashUser); }
         };
         window.addEventListener('profileImageUpdated', handler);
         return () => window.removeEventListener('profileImageUpdated', handler);
     }, []);
 
-
-    const toggleMenu = () => setMenuOpen(prev => !prev);
-
     const handleLogout = () => {
         localStorage.clear();
-        window.location.href = '/'; // reload + redirect to login
+        window.location.href = '/';
     };
 
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (menuRef.current && !menuRef.current.contains(event.target)) {
-                setMenuOpen(false);
-            }
+        const handleClickOutside = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
         };
-
-        const handleEscape = (event) => {
-            if (event.key === 'Escape') {
-                setMenuOpen(false);
-            }
-        };
-
+        const handleEscape = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('keydown', handleEscape);
         return () => {
@@ -68,75 +64,172 @@ const DashNav = () => {
     }, []);
 
     return (
-        <nav className="relative bg-white border-b border-gray-200 shadow-sm py-4 px-6 rounded-b-2xl flex justify-between items-center">
-            <h1 className="text-2xl px-10 font-extrabold tracking-tight select-none" style={{ color: '#6b0f14' }}>Dashboard</h1>
+        <nav className="w-full flex items-center justify-between px-6 py-0 bg-white"
+            style={{ borderBottom: '1px solid rgba(107,15,20,0.10)', minHeight: '64px' }}>
 
-            <div className="relative">
+            {/* ── Left: breadcrumb / page title ── */}
+            <div className="flex items-center gap-2 select-none pl-8 xl:pl-0">
+                <span className="text-xs font-semibold uppercase tracking-widest"
+                    style={{ color: 'rgba(107,15,20,0.4)' }}>
+                    HMS
+                </span>
+                <FaChevronRight size={10} style={{ color: 'rgba(107,15,20,0.3)' }} />
+                <span className="text-sm font-bold tracking-wide" style={{ color: '#6b0f14' }}>
+                    {pageTitle}
+                </span>
+            </div>
+
+            {/* ── Right: notification + user menu ── */}
+            <div className="flex items-center gap-3">
+
+                {/* Notification bell */}
                 <button
-                    onClick={toggleMenu}
-                    aria-haspopup="true"
-                    aria-expanded={menuOpen}
-                    aria-label="User menu"
-                    className="flex items-center gap-3 focus:outline-none focus:ring-2 rounded"
-                    style={{ '--tw-ring-color': '#6b0f14' }}
+                    aria-label="Notifications"
+                    className="relative p-2 rounded-xl transition-colors hover:bg-red-50 focus:outline-none"
+                    style={{ color: '#6b0f14' }}
                 >
-                    <img
-                        src={profileImage}
-                        alt={`${username} avatar`}
-                        className="h-11 w-11 rounded-full border-2 shadow-sm object-cover object-center"
-                        style={{ borderColor: '#6b0f14' }}
-                    />
-                    <span className="hidden sm:inline uppercase font-semibold text-[#6b0f14] tracking-wider select-none">
-                        {username}
-                    </span>
-                    <span className="absolute bottom-1 right-0 h-3 w-3 border-2 border-white rounded-full animate-pulse" style={{ background: '#6b0f14' }} />
+                    <FaBell size={18} />
+                    {/* dot badge */}
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full border-2 border-white"
+                        style={{ background: '#d4af37' }} />
                 </button>
 
-                <div
-                    ref={menuRef}
-                    className={`origin-top-right absolute right-0 mt-3 w-72 rounded-3xl bg-white border border-gray-100 shadow-xl transition-transform transform
-                        ${menuOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'}
-                    `}
-                    role="menu"
-                    aria-label="User menu options"
-                >
-                    <div className="p-5 border-b border-gray-100 text-center">
-                        <img
-                            src={profileImage}
-                            alt={`${username} profile`}
-                            className="h-20 w-20 mx-auto rounded-full border shadow-md object-cover object-center"
-                        />
-                        <h2 className="pt-3 text-lg font-bold text-slate-900">{username}</h2>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{role}</p>
-                    </div>
+                {/* Divider */}
+                <div className="h-8 w-px mx-1" style={{ background: 'rgba(107,15,20,0.12)' }} />
 
-                    <div className="p-3 space-y-1">
-                        <a
-                            href="/Dashboard/Profile"
-                            className="flex items-center gap-3 px-4 py-2 rounded-lg text-amber-700 hover:bg-amber-100 transition font-medium"
-                            role="menuitem"
-                        >
-                            <FaUserCog className="text-lg" />
-                            Profile
-                        </a>
-                        {canSeeBackup && (
+                {/* User menu trigger */}
+                <div className="relative" ref={menuRef}>
+                    <button
+                        onClick={() => setMenuOpen(prev => !prev)}
+                        aria-haspopup="true"
+                        aria-expanded={menuOpen}
+                        aria-label="User menu"
+                        className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-colors hover:bg-red-50 focus:outline-none group"
+                    >
+                        {/* Avatar with live pulse ring */}
+                        <div className="relative">
+                            <img
+                                src={profileImage}
+                                alt={`${username} avatar`}
+                                className="h-9 w-9 rounded-full object-cover object-center border-2 shadow-sm"
+                                style={{ borderColor: '#6b0f14' }}
+                            />
+                            <span
+                                className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white animate-pulse"
+                                style={{ background: '#22c55e' }}
+                            />
+                        </div>
+
+                        {/* Name + role stacked */}
+                        <div className="hidden sm:flex flex-col items-start leading-tight">
+                            <span className="text-sm font-bold tracking-wide" style={{ color: '#6b0f14' }}>
+                                {username}
+                            </span>
+                            <span className="text-[10px] uppercase tracking-widest font-semibold"
+                                style={{ color: 'rgba(107,15,20,0.5)' }}>
+                                {roleNames.join(', ')}
+                            </span>
+                        </div>
+
+                        {/* Chevron indicator */}
+                        <FaChevronRight
+                            size={10}
+                            className={`hidden sm:block transition-transform duration-200 ${menuOpen ? 'rotate-90' : ''}`}
+                            style={{ color: 'rgba(107,15,20,0.4)' }}
+                        />
+                    </button>
+
+                    {/* ── Dropdown panel ── */}
+                    <div
+                        className={`absolute right-0 mt-2 w-72 rounded-2xl bg-white shadow-2xl border
+                            transition-all duration-200 origin-top-right
+                            ${menuOpen ? 'opacity-100 scale-100 pointer-events-auto translate-y-0'
+                                : 'opacity-0 scale-95 pointer-events-none -translate-y-2'}`}
+                        style={{ border: '1px solid rgba(107,15,20,0.10)', zIndex: 999 }}
+                        role="menu"
+                        aria-label="User menu options"
+                    >
+                        {/* Profile header */}
+                        <div className="relative overflow-hidden rounded-t-2xl px-5 pt-5 pb-4 text-center"
+                            style={{ background: 'linear-gradient(135deg, #6b0f14 0%, #4f0a0f 100%)' }}>
+                            {/* Gold accent stripe */}
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5"
+                                style={{ background: 'linear-gradient(90deg, transparent, #d4af37, transparent)' }} />
+                            <div className="relative inline-block">
+                                <img
+                                    src={profileImage}
+                                    alt={`${username} profile`}
+                                    className="h-16 w-16 mx-auto rounded-full object-cover object-center border-2 shadow-lg"
+                                    style={{ borderColor: '#d4af37' }}
+                                />
+                                <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-white animate-pulse"
+                                    style={{ background: '#22c55e' }} />
+                            </div>
+                            <h2 className="mt-2 text-base font-bold text-white tracking-wide">{username}</h2>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest mt-0.5"
+                                style={{ color: '#d4af37' }}>
+                                {role}
+                            </p>
+                        </div>
+
+                        {/* Menu items */}
+                        <div className="p-2 space-y-0.5">
                             <a
-                                href="/Dashboard/BackupOptions"
-                                className="flex items-center gap-3 px-4 py-2 rounded-lg text-amber-700 hover:bg-amber-100 transition font-medium"
+                                href="/Dashboard/Profile"
+                                className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                                style={{ color: '#6b0f14' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(107,15,20,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                 role="menuitem"
                             >
-                                <FaGear className="text-lg" />
-                                Backup Options
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg"
+                                    style={{ background: 'rgba(107,15,20,0.08)' }}>
+                                    <FaUserCog size={13} style={{ color: '#6b0f14' }} />
+                                </span>
+                                Profile
                             </a>
-                        )}
-                        <button
-                            onClick={handleLogout}
-                            className="w-full text-left flex items-center gap-3 px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 transition font-medium"
-                            role="menuitem"
-                        >
-                            <FaPowerOff className="text-lg fill-red-600" />
-                            Logout
-                        </button>
+
+                            {canSeeBackup && (
+                                <a
+                                    href="/Dashboard/BackupOptions"
+                                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                                    style={{ color: '#6b0f14' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(107,15,20,0.06)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    role="menuitem"
+                                >
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-lg"
+                                        style={{ background: 'rgba(107,15,20,0.08)' }}>
+                                        <FaGear size={13} style={{ color: '#6b0f14' }} />
+                                    </span>
+                                    Backup Options
+                                </a>
+                            )}
+
+                            {/* Divider */}
+                            <div className="my-1 mx-2 h-px" style={{ background: 'rgba(107,15,20,0.08)' }} />
+
+                            <button
+                                onClick={handleLogout}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors text-left"
+                                style={{ color: '#dc2626' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                role="menuitem"
+                            >
+                                <span className="flex h-7 w-7 items-center justify-center rounded-lg"
+                                    style={{ background: 'rgba(220,38,38,0.08)' }}>
+                                    <FaPowerOff size={13} style={{ color: '#dc2626' }} />
+                                </span>
+                                Logout
+                            </button>
+                        </div>
+
+                        {/* Footer note */}
+                        <p className="text-center text-[10px] pb-3 tracking-widest uppercase"
+                            style={{ color: 'rgba(107,15,20,0.3)' }}>
+                            University of Peradeniya
+                        </p>
                     </div>
                 </div>
             </div>

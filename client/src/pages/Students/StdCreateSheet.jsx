@@ -11,11 +11,14 @@ const StdCreateSheet = () => {
     const navigate = useNavigate();
     const token = localStorage.getItem('login');
 
+    const [showPreview, setShowPreview] = useState(false);
+
     const [sheet, setsheet] = useState({
         file: null
     });
 
     const [loading, setLoading] = useState(false);
+    const [progress, setProgress] = useState(null);
     const [validation, setValidation] = useState(null);
     const [allowUploadDespiteErrors, setAllowUploadDespiteErrors] = useState(false);
 
@@ -29,6 +32,17 @@ const StdCreateSheet = () => {
             // validate immediately
             validateSheetFile(file).then(res => setValidation(res)).catch(err => setValidation({ ok: false, error: String(err) }));
         }
+    };
+
+    const handleDownloadTemplate = () => {
+        const headers = [
+            ["No", "Enrolment No.", "Name", "A/L District", "Sex", "ADD1", "ADD2", "ADD3", "Address", "Date of Enrollment"]
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(headers);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Student Template");
+        XLSX.writeFile(wb, "Student_Upload_Template.xlsx");
     };
 
     const normalizeHeader = (h) => (h||'').toString().toLowerCase().replace(/\W/g,'');
@@ -115,10 +129,26 @@ const StdCreateSheet = () => {
             if (!proceed) return;
         }
 
+        const uploadId = Math.random().toString(36).substring(2, 15);
         const formData = new FormData();
+        formData.append('uploadId', uploadId);
         formData.append('file', sheet.file);
 
         setLoading(true);
+        setProgress({ current: 0, total: 0 });
+
+        let intervalId = setInterval(async () => {
+            try {
+                const res = await axios.get(`${import.meta.env.VITE_APP_API}/student/upload-progress/${uploadId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.data.progress) {
+                    setProgress(res.data.progress);
+                }
+            } catch (err) {
+                // ignore polling errors
+            }
+        }, 1000);
 
         try {
             const res = await axios.post(
@@ -144,7 +174,9 @@ const StdCreateSheet = () => {
             console.error(err);
             alert("An error occurred while uploading the sheet.");
         } finally {
+            clearInterval(intervalId);
             setLoading(false);
+            setProgress(null);
         }
     };
 
@@ -167,6 +199,62 @@ const StdCreateSheet = () => {
                 <p className="">The Uploading time will depend on your size of Sheet</p>
                 <p className="text-red-500 font-bold">only 2000 recodes can upload via Sheet per Day</p>
             </div>
+
+            <div className="mb-8 p-4 bg-gray-50 border rounded-lg">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-800">Template Sheet</h2>
+                        <p className="text-sm text-gray-600">Download the template or preview the required columns.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowPreview(!showPreview)}
+                            className="px-4 py-2 text-sm font-medium text-[#6b0f14] bg-white border border-[#6b0f14] rounded hover:bg-[#6b0f14] hover:text-white transition"
+                        >
+                            {showPreview ? 'Hide Preview' : 'Preview Template'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDownloadTemplate}
+                            className="px-4 py-2 text-sm font-medium text-white bg-[#6b0f14] rounded hover:bg-[#4f0a0f] transition flex items-center gap-2"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            Download Template
+                        </button>
+                    </div>
+                </div>
+
+                {showPreview && (
+                    <div className="overflow-x-auto bg-white border rounded shadow-inner p-2">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-gray-100 text-gray-700">
+                                <tr>
+                                    <th className="px-3 py-2 border-b">No</th>
+                                    <th className="px-3 py-2 border-b">Enrolment No.*</th>
+                                    <th className="px-3 py-2 border-b">Name</th>
+                                    <th className="px-3 py-2 border-b">A/L District</th>
+                                    <th className="px-3 py-2 border-b">Sex</th>
+                                    <th className="px-3 py-2 border-b">ADD1</th>
+                                    <th className="px-3 py-2 border-b">ADD2</th>
+                                    <th className="px-3 py-2 border-b">ADD3</th>
+                                    <th className="px-3 py-2 border-b">Address</th>
+                                    <th className="px-3 py-2 border-b">Date of Enrollment</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colSpan="10" className="px-3 py-4 border-b text-center text-gray-500 italic">No data to display. Please populate this structure in your Excel file.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p className="mt-2 text-xs text-gray-500 italic">* Required field. Sex must be M, Male, F, Female, REV, or Reverend.</p>
+                    </div>
+                )}
+            </div>
+
             <FileInput
                 label="Select Excel File"
                 name="studentSheet"
@@ -208,6 +296,21 @@ const StdCreateSheet = () => {
                             </label>
                         </div>
                     )}
+                </div>
+            )}
+
+            {loading && progress && progress.total > 0 && (
+                <div className="mt-4 w-full">
+                    <div className="flex justify-between text-sm font-medium mb-1 text-gray-700">
+                        <span>Processing rows...</span>
+                        <span>{progress.current} / {progress.total}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                            style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                        ></div>
+                    </div>
                 </div>
             )}
 

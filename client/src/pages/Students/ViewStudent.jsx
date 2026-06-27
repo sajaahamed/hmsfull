@@ -98,6 +98,19 @@ const ViewStudent = () => {
                     <Detail label="Distance" value={stdData.distance + ' km'} />
                     <Detail label="Assigned" value={stdData.isAssign ? 'Yes' : 'No'} />
                     {stdData.hostelAssignedDate && <Detail label="Assigned Date" value={new Date(stdData.hostelAssignedDate).toLocaleDateString()} />}
+                    
+                    {stdData.lastEditedBy && (
+                        <div className="col-span-full mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                Record Edited By Admin
+                            </p>
+                            <div className="mt-1 grid grid-cols-2 gap-4">
+                                <Detail label="Admin Name / Email" value={stdData.lastEditedBy} />
+                                <Detail label="Last Edited Date" value={new Date(stdData.lastEditedAt).toLocaleString()} />
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <form onSubmit={handleUpdate} className="grid md:grid-cols-2 gap-4 text-sm">

@@ -27,6 +27,8 @@ const StudentSchema = new mongoose.Schema({
     department: String,
     batchYear: String,
     studyYear: String,
+    lastEditedBy: String,
+    lastEditedAt: Date,
 }, { timestamps: true });
 
 // Ensure enrolment numbers follow the pattern "MG/YY/NNN"

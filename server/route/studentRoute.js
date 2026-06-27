@@ -7,6 +7,7 @@ const upload = require('../middlewares/UploadMiddleware');
 const router = express.Router();
 
 router.post('/create-student-sheet', authMiddleware, upload.single('file'), checkPermission('create-student-sheet'), StudentController.createstdviaSheet)
+router.get('/upload-progress/:uploadId', authMiddleware, StudentController.getUploadProgress)
 router.post('/upload-students-distance-google', authMiddleware, upload.single('file'), checkPermission('create-student-sheet'), StudentController.uploadStudentsDistanceGoogle)
 router.post('/process-uploaded-file', authMiddleware, checkPermission('create-student-sheet'), StudentController.processUploadedFile)
 
