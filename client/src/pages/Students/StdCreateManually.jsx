@@ -67,7 +67,7 @@ const StdCreateManually = () => {
                     <DefaultInput label="Name" name="name" value={studentData.name} onChange={handleInputChange} />
                     <DefaultInput label="A/L District" name="alDistrict" value={studentData.alDistrict} onChange={handleInputChange} />
                     <Dropdown
-                        label="Sex"
+                        label="Gender"
                         name="sex"
                         value={studentData.sex}
                         onChange={handleInputChange}

@@ -551,8 +551,9 @@ const WardenController = {
             const wardens = await Warden.find()
                 .populate('userId', 'username email active')
                 .populate('hostelId', 'name gender hostelID');
-            
-            return res.json({ Status: 'Success', Result: wardens });
+
+                console.log('🛎️ getAllWardens called – returning', wardens.length, 'records');
+                return res.json({ Status: 'Success', Result: wardens });
         } catch (err) {
             console.error('Error getting wardens:', err);
             return res.json({ Error: 'Failed to fetch wardens' });
@@ -566,7 +567,7 @@ const WardenController = {
             const warden = await Warden.findById(id)
                 .populate('userId', 'username email active')
                 .populate('hostelId', 'name gender hostelID');
-            
+
             if (!warden) {
                 return res.json({ Error: 'Warden not found' });
             }
@@ -657,7 +658,7 @@ const WardenController = {
                 if (otherAssignments >= 2) {
                     return res.json({ Error: 'User can manage at most two hostels' });
                 }
-                
+
                 // Update hostel references
                 await Hostel.findByIdAndUpdate(warden.hostelId, { warden: null });
                 await Hostel.findByIdAndUpdate(hostelId, { warden: warden.userId });
@@ -848,7 +849,7 @@ const WardenController = {
             const objectIdPattern = /^[0-9a-fA-F]{24}$/;
             const enrolmentNos = [];
             const objectIdsFromRegNo = [];
-            
+
             allocs.forEach(a => {
                 if (!a.studentId && a.regNo) {
                     const val = String(a.regNo);
@@ -862,7 +863,7 @@ const WardenController = {
 
             // Resolve legacy string regNos to Student objects
             const studentMap = {};
-            
+
             const promises = [];
             if (enrolmentNos.length > 0) {
                 promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id'));
@@ -870,10 +871,10 @@ const WardenController = {
             if (objectIdsFromRegNo.length > 0) {
                 promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id'));
             }
-            
+
             const studentResults = await Promise.all(promises);
             const flatStudents = studentResults.flat();
-            
+
             flatStudents.forEach(s => {
                 if (s.enrolmentNo) studentMap[s.enrolmentNo] = s;
                 studentMap[s._id.toString()] = s;
@@ -897,7 +898,7 @@ const WardenController = {
             const paymentsMap = {};
             payments.forEach(p => {
                 const sid = p.studentId ? p.studentId.toString() : null;
-                if(sid) paymentsMap[sid] = p;
+                if (sid) paymentsMap[sid] = p;
             });
 
             const results = [];
@@ -906,7 +907,7 @@ const WardenController = {
                 // Determine the student object
                 let studentObj = null;
                 let sidStr = null;
-                
+
                 if (a.studentId && a.studentId._id) {
                     studentObj = a.studentId;
                     sidStr = a.studentId._id.toString();
@@ -1002,7 +1003,7 @@ const WardenController = {
             const studentIdsForLookup = payments.map(p => (p.studentId && p.studentId._id) ? p.studentId._id.toString() : (p.studentId ? p.studentId.toString() : null)).filter(Boolean);
 
             const allocs = await Allocation.find({
-                $or: [ { regNo: { $in: studentIdsForLookup } }, { studentId: { $in: studentIdsForLookup } } ],
+                $or: [{ regNo: { $in: studentIdsForLookup } }, { studentId: { $in: studentIdsForLookup } }],
                 active: true
             }).populate('roomId').populate('hostelID');
 
@@ -1020,7 +1021,7 @@ const WardenController = {
                 const pObj = p.toObject ? p.toObject() : p;
                 let roomNo = null;
                 let hostelName = null;
-                
+
                 // Try to find room and hostel using studentId first
                 if (pObj.studentId && pObj.studentId._id) {
                     const studentIdStr = pObj.studentId._id.toString();
@@ -1029,7 +1030,7 @@ const WardenController = {
                         hostelName = allocMap[studentIdStr].hostelName || null;
                     }
                 }
-                
+
                 // Fallback: try using enrollment number if studentId lookup failed
                 if (!roomNo && pObj.studentId && pObj.studentId.enrolmentNo) {
                     if (allocMap[pObj.studentId.enrolmentNo]) {
@@ -1037,7 +1038,7 @@ const WardenController = {
                         hostelName = allocMap[pObj.studentId.enrolmentNo].hostelName || null;
                     }
                 }
-                
+
                 pObj.roomNo = roomNo;
                 pObj.hostelName = hostelName;
                 return pObj;
@@ -1051,7 +1052,7 @@ const WardenController = {
                     const date = new Date(p.paidDate);
                     paidDateStr = date.toISOString().split('T')[0]; // Gets YYYY-MM-DD
                 }
-                
+
                 return {
                     '#': idx + 1,
                     'Reg No': p.studentId?.no || '',

@@ -19,4 +19,12 @@ router.get('/eligible-for-assignment', authMiddleware, EligibilityController.get
 // Assigned Students page - eligible and assigned
 router.get('/assigned-students', authMiddleware, EligibilityController.getAssignedStudents);
 
+// Unassign students
+router.post('/unassign-students', authMiddleware, EligibilityController.unassignStudents);
+
+// Excel Import List
+router.post('/save-excel-import', authMiddleware, EligibilityController.saveExcelImportList);
+router.get('/get-excel-import', authMiddleware, EligibilityController.getExcelImportList);
+router.delete('/clear-excel-import', authMiddleware, EligibilityController.clearExcelImportList);
+
 module.exports = router;

@@ -9,7 +9,9 @@ const ViewHostel = () => {
 
     const [getonehostel, setGetOneHostel] = useState(null)
     const [newRoomCount, setNewRoomCount] = useState('')
+    const [newGender, setNewGender] = useState('')
     const [loadingRoomUpdate, setLoadingRoomUpdate] = useState(false)
+    const [loadingGenderUpdate, setLoadingGenderUpdate] = useState(false)
     const [loadingAssignWarden, setLoadingAssignWarden] = useState(false)
     const [message, setMessage] = useState('')
     const [assignStatus, setAssignStatus] = useState('')
@@ -46,7 +48,13 @@ const ViewHostel = () => {
     useEffect(() => {
         fetchHostel()
         fetchAvailableWardens()
-    }, [id])
+    }, [id, token])
+
+    useEffect(() => {
+        if (getonehostel?.gender) {
+            setNewGender(getonehostel.gender)
+        }
+    }, [getonehostel])
 
     // Update room count API call
     const handleRoomCountUpdate = async () => {
@@ -70,6 +78,30 @@ const ViewHostel = () => {
             setMessage('Error updating room count')
         } finally {
             setLoadingRoomUpdate(false)
+        }
+    }
+
+    const handleGenderUpdate = async () => {
+        if (!newGender) {
+            setMessage('Please select a hostel gender')
+            return
+        }
+
+        try {
+            setLoadingGenderUpdate(true)
+            const res = await axios.post(
+                `${import.meta.env.VITE_APP_API}/hostel/update-hostel-gender/${id}`,
+                { gender: newGender },
+                { headers: { Authorization: `Bearer ${token}` } }
+            )
+
+            setMessage(res.data.Message || 'Hostel gender updated successfully.')
+            fetchHostel()
+        } catch (error) {
+            console.error('Error updating hostel gender:', error)
+            setMessage('Error updating hostel gender')
+        } finally {
+            setLoadingGenderUpdate(false)
         }
     }
 
@@ -139,6 +171,31 @@ const ViewHostel = () => {
                     <Detail label="Hostel Warden" value={getonehostel?.warden?.username} />
                     <Detail label="Warden Email" value={getonehostel?.warden?.email} />
                     <Detail label="Room Count" value={getonehostel?.roomCount} />
+                    <Detail label="Hostel Gender" value={getonehostel?.gender} />
+                </div>
+            </div>
+
+            {/* Update Hostel Gender */}
+            <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg">
+                <h1 className="font-bold text-[#6b0f14] text-xl">Update Hostel Gender</h1>
+                <div className="mt-4 flex items-center gap-4">
+                    <select
+                        className="border rounded-md px-4 py-2 w-52"
+                        value={newGender}
+                        onChange={(e) => setNewGender(e.target.value)}
+                    >
+                        <option value="">-- Select Gender --</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="REV">REV</option>
+                    </select>
+                    <button
+                        onClick={handleGenderUpdate}
+                        disabled={loadingGenderUpdate}
+                        className="bg-[#6b0f14] text-white px-4 py-2 rounded-md hover:bg-[#4f0a0f] disabled:opacity-50"
+                    >
+                        {loadingGenderUpdate ? 'Updating...' : 'Update Gender'}
+                    </button>
                 </div>
             </div>
 

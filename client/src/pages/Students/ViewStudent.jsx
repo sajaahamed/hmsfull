@@ -1,8 +1,9 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, Navigate } from 'react-router-dom';
+import { Link, useParams, Navigate } from 'react-router-dom';
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
 import DefaultInput from '../../components/Form/DefaultInput';
+import Dropdown from '../../components/Form/Dropdown';
 import { getUserInfoFromToken } from '../../utils/auth';
 
 const ViewStudent = () => {
@@ -22,10 +23,6 @@ const ViewStudent = () => {
     const allowedRoles = ['warden', 'admin', 'director'];
     const isAuthorized = userRoles.some(role => allowedRoles.includes(role));
 
-    if (!isAuthorized) {
-        return <Navigate to="/" replace />;
-    }
-
     useEffect(() => {
         axios.get(`${import.meta.env.VITE_APP_API}/student/get-student-byID/${id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -36,6 +33,10 @@ const ViewStudent = () => {
             })
             .catch(err => console.log(err));
     }, [id, token]);
+
+    if (!isAuthorized) {
+        return <Navigate to="/" replace />;
+    }
 
     const handleEditToggle = () => setIsEditing(!isEditing);
 
@@ -87,7 +88,7 @@ const ViewStudent = () => {
                     <Detail label="NIC" value={stdData.nic} />
                     <Detail label="Name" value={stdData.name} />
                     <Detail label="AL District" value={stdData.alDistrict} />
-                    <Detail label="Sex" value={stdData.sex} />
+                    <Detail label="Gender" value={stdData.sex} />
                     <Detail label="Address 1" value={stdData.address1} />
                     <Detail label="Address 2" value={stdData.address2} />
                     <Detail label="Address 3" value={stdData.address3} />
@@ -134,6 +135,17 @@ const ViewStudent = () => {
                             onChange={handleChange}
                         />
                     ))}
+                    <Dropdown
+                        label="Gender"
+                        name="sex"
+                        value={formData.sex || ''}
+                        onChange={handleChange}
+                        options={[
+                            { label: 'Male', value: 'Male' },
+                            { label: 'Female', value: 'Female' },
+                            { label: 'REV', value: 'REV' }
+                        ]}
+                    />
                     <div className="col-span-2 -mt-4">
                         <DefaultBtn type="submit" label="Update Student" />
                     </div>

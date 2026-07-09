@@ -4,6 +4,7 @@ import DefaultBtn from '../../components/Buttons/DefaultBtn'
 import axios from 'axios'
 
 import DefaultInput from '../../components/Form/DefaultInput'
+import Dropdown from '../../components/Form/Dropdown'
 
 
 const ViewRoom = () => {
@@ -24,7 +25,18 @@ const ViewRoom = () => {
     const [roomcapasity, setroomcapasity] = useState({
         roomID: id,
         capasity: 0,
+        gender: '',
     })
+
+    useEffect(() => {
+        if (!oneRoom?._id) return;
+        setroomcapasity(prev => ({
+            ...prev,
+            roomID: id,
+            capasity: oneRoom.capasity ?? 0,
+            gender: oneRoom.gender || ''
+        }));
+    }, [oneRoom, id]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -78,7 +90,7 @@ const ViewRoom = () => {
             </div>
 
             <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg mt-5">
-                <h1 className="text-2xl font-bold text-[#6b0f14] mb-4">Update in Room Capasity</h1>
+                <h1 className="text-2xl font-bold text-[#6b0f14] mb-4">Update Room Details</h1>
                 <div className="">
                     <h1 className="text-[#6b0f14]">Current Capasity</h1>
                     <p className="">{oneRoom?.capasity}</p>
@@ -95,11 +107,24 @@ const ViewRoom = () => {
                             placeholder={"Enter New Room Capasity"}
                             required
                         />
+
+                        <Dropdown
+                            label="Room Gender"
+                            name="gender"
+                            value={roomcapasity.gender}
+                            onChange={handleInputChange}
+                            options={[
+                                { label: 'Male', value: 'Male' },
+                                { label: 'Female', value: 'Female' },
+                                { label: 'REV', value: 'REV' },
+                            ]}
+                            required
+                        />
                         
                         <div className="-mt-4">
                             <DefaultBtn 
                                 type='submit'
-                                label='Update Room Capasity'
+                                label='Update Room'
                             />
                         </div>
                     </form>

@@ -30,6 +30,7 @@ import ViewHostel from './pages/Hostels/ViewHostel'
 import Rooms from './pages/Rooms/Rooms'
 import ViewRoom from './pages/Rooms/ViewRoom'
 import HostelAssign from './pages/Students/HostelAssign'
+import AssignViaExcel from './pages/Students/AssignViaExcel'
 import WardenStudents from './pages/WardenDash/WardenStudents'
 import ExtraNeeds from './pages/StudentDash/ExtraNeeds'
 import EmergencyContact from './pages/StudentDash/EmergencyContact'
@@ -60,54 +61,54 @@ function App() {
                     <Route path='/verify-email' element={<VerifyEmail />} />
 
                     <Route path='/Dashboard/' element={<PrivateRoute element={<Dashbaord />} />} >
-                        <Route path='*' element={<DashError /> } />
+                        <Route path='*' element={<DashError />} />
                         <Route path='Home' element={<PrivateRoute element={<DashHome />} />} />
-                        
-                        <Route path='Permissions' element={<PrivateRoute element={<RolePermissions /> } /> } />
-                        <Route path='Create-Permissions' element={<PrivateRoute element={<CreateRolePermissions /> } /> } />
-                        <Route path='View-One-Role/:id' element={<PrivateRoute element={<ViewOneRole /> } />} />
-                    
-                        <Route path='Users' element={<PrivateRoute element={<UserManage /> } /> } />
-                        <Route path='Wardens' element={<PrivateRoute element={<WardenManage /> } /> } />
-                        <Route path='View-user/:id' element={<PrivateRoute element={<ViewUser /> } /> } />
 
-                        <Route path='Profile' element={<PrivateRoute element={<Profile /> } /> } />
+                        <Route path='Permissions' element={<PrivateRoute element={<RolePermissions />} />} />
+                        <Route path='Create-Permissions' element={<PrivateRoute element={<CreateRolePermissions />} />} />
+                        <Route path='View-One-Role/:id' element={<PrivateRoute element={<ViewOneRole />} />} />
 
-                        <Route path='BackupOptions' element={<PrivateRoute element={<BackupOptions /> } allowedRoles={['admin', 'director']} /> } />
+                        <Route path='Users' element={<PrivateRoute element={<UserManage />} />} />
+                        <Route path='Wardens' element={<PrivateRoute element={<WardenManage />} />} />
+                        <Route path='View-user/:id' element={<PrivateRoute element={<ViewUser />} />} />
 
-                        <Route path='Students' element={<PrivateRoute element={<Students /> } /> } />
-                        <Route path='Student-create-manually' element={<PrivateRoute element={<StdCreateManually /> } /> } />
-                        <Route path='Stundet-upload-sheet' element={<PrivateRoute element={<StdCreateSheet /> } /> } />
-                        <Route path='View-Student/:id' element={<PrivateRoute element={<ViewStudent /> } /> } />
+                        <Route path='Profile' element={<PrivateRoute element={<Profile />} />} />
 
-                        <Route path='Student-assign' element={<PrivateRoute element={<HostelAssign /> } /> } />
-                        <Route path='EligibleStudents' element={<PrivateRoute element={<EligibleStudents /> } /> } />
-                        <Route path='AssignedStudents' element={<PrivateRoute element={<AssignedStudents /> } /> } />
+                        <Route path='BackupOptions' element={<PrivateRoute element={<BackupOptions />} allowedRoles={['admin', 'director']} />} />
 
-                        <Route path='Hostels' element={<PrivateRoute element={<Hostels /> } /> } />
-                        <Route path='Create-hostel' element={<PrivateRoute element={<CreateHostel /> } /> } />
-                        <Route path='View-Hostel/:id' element={<PrivateRoute element={<ViewHostel /> } /> } />
+                        <Route path='Students' element={<PrivateRoute element={<Students />} />} />
+                        <Route path='Student-create-manually' element={<PrivateRoute element={<StdCreateManually />} />} />
+                        <Route path='Stundet-upload-sheet' element={<PrivateRoute element={<StdCreateSheet />} />} />
+                        <Route path='View-Student/:id' element={<PrivateRoute element={<ViewStudent />} />} />
 
-                        <Route path='Rooms' element={<PrivateRoute element={<Rooms /> } /> } />
-                        <Route path='View-Room/:id' element={<PrivateRoute element={<ViewRoom /> } /> } />
+                        <Route path='Student-assign' element={<PrivateRoute element={<HostelAssign />} />} />
+                        <Route path='Assign-via-excel' element={<PrivateRoute element={<AssignViaExcel />} />} />
+                        <Route path='EligibleStudents' element={<PrivateRoute element={<EligibleStudents />} />} />
+                        <Route path='AssignedStudents' element={<PrivateRoute element={<AssignedStudents />} />} />
 
-                        <Route path='WardenStudents' element={<PrivateRoute element={<WardenStudents /> } /> } />
-                        <Route path='WardenPayments' element={<PrivateRoute element={<WardenPayments /> } /> } />
-                        <Route path='WardenRooms' element={<PrivateRoute element={<WardenRooms /> } /> } />
-                        <Route path='WardenRoomAssignNeed' element={<PrivateRoute element={<WardenRoomAssignNeed /> } /> } />
-                        <Route path='StudentdAssignNormal' element={<PrivateRoute element={<StdAssignNormal /> } /> } /> 
-                        <Route path='AssignStudentViaNeeds' element={<PrivateRoute element={<AssignStdRoomSp /> } /> } />
+                        <Route path='Hostels' element={<PrivateRoute element={<Hostels />} />} />
+                        <Route path='Create-hostel' element={<PrivateRoute element={<CreateHostel />} />} />
+                        <Route path='View-Hostel/:id' element={<PrivateRoute element={<ViewHostel />} />} />
+
+                        <Route path='Rooms' element={<PrivateRoute element={<Rooms />} />} />
+                        <Route path='View-Room/:id' element={<PrivateRoute element={<ViewRoom />} />} />
+
+                        <Route path='WardenStudents' element={<PrivateRoute element={<WardenStudents />} />} />
+                        <Route path='WardenPayments' element={<PrivateRoute element={<WardenPayments />} />} />
+                        <Route path='WardenRooms' element={<PrivateRoute element={<WardenRooms />} />} />
+                        <Route path='WardenRoomAssignNeed' element={<PrivateRoute element={<WardenRoomAssignNeed />} />} />
+                        <Route path='StudentdAssignNormal' element={<PrivateRoute element={<StdAssignNormal />} />} />
+                        <Route path='AssignStudentViaNeeds' element={<PrivateRoute element={<AssignStdRoomSp />} />} />
                         <Route path='AssignStudentToRoom/:id' element={<PrivateRoute element={<AssignStundetToRoomSp />} />} />
-                        <Route path='AlreadyAssigned' element={<PrivateRoute element={<AlreadyAssigned /> } /> } />
+                        <Route path='AlreadyAssigned' element={<PrivateRoute element={<AlreadyAssigned />} />} />
 
-                        <Route path='ExtraNeeds' element={<PrivateRoute element={<ExtraNeeds /> } /> } />
-                        <Route path='CreateExtraNeeds' element={<PrivateRoute element={<CreateExtraNeeds /> } /> } />
-                        <Route path='EmergencyContact' element={<PrivateRoute element={<EmergencyContact /> } /> } />
-                        <Route path='StdExtraNeeds' element={<PrivateRoute element={<StdExtraNeeds /> } /> } />
-                        <Route path='AdminExtraNeeds' element={<PrivateRoute element={<AdminExtraNeeds /> } /> } />
+                        <Route path='ExtraNeeds' element={<PrivateRoute element={<ExtraNeeds />} />} />
+                        <Route path='CreateExtraNeeds' element={<PrivateRoute element={<CreateExtraNeeds />} />} />
+                        <Route path='EmergencyContact' element={<PrivateRoute element={<EmergencyContact />} />} />
+                        <Route path='StdExtraNeeds' element={<PrivateRoute element={<StdExtraNeeds />} />} />
+                        <Route path='AdminExtraNeeds' element={<PrivateRoute element={<AdminExtraNeeds />} />} />
 
-                        <Route path='Reports' element={<PrivateRoute element={<Reports /> } /> } />
-
+                        <Route path='Reports' element={<PrivateRoute element={<Reports />} />} />
 
                     </Route>
 

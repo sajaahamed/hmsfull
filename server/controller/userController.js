@@ -5,12 +5,25 @@ const User = require("../model/User");
 const UserController = {
     getallusers: async (req, res) => {
         try {
-            const getalluserdata = await User.find().populate('roles');
-
-            return res.json({ Result: getalluserdata })
-        }
-        catch (err) {
-            console.log(err)
+            // Fetch all users with their roles populated
+            const users = await User.find().populate('roles');
+            const Student = require('../model/Student');
+            const filtered = [];
+            for (const u of users) {
+                // Determine if this user is a synthetic student (has a role named 'student')
+                const isStudentRole = u.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'student');
+                if (isStudentRole) {
+                    // Include only if a matching student record exists
+                    const student = await Student.findOne({ enrolmentNo: u.username });
+                    if (student) filtered.push(u);
+                } else {
+                    // Non‑student users (admin, director, warden) are always included
+                    filtered.push(u);
+                }
+            }
+            return res.json({ Result: filtered });
+        } catch (err) {
+            console.log(err);
         }
     },
 
@@ -162,6 +175,7 @@ const UserController = {
             const { id } = req.params;
             const Warden = require('../model/Warden');
             const Hostel = require('../model/Hostel');
+            const Student = require('../model/Student');
 
             const user = await User.findById(id);
             if (!user) return res.status(404).json({ error: 'User not found' });
@@ -169,14 +183,33 @@ const UserController = {
             // If user has warden records, remove them and clear hostel references
             await Hostel.updateMany({ warden: id }, { $unset: { warden: "" } });
             await Warden.deleteMany({ userId: id });
+            
+            // If this user is a synthetic student account, clean up student data
+            // Synthetic usernames correspond to enrolmentNo of the student.
+            const student = await Student.findOne({ enrolmentNo: user.username });
+            if (student) {
+                const Allocation = require('../model/Allocation');
+                const SpecialNeeds = require('../model/SpecialNeeds');
+                const EmergencyContact = require('../model/EmergencyContact');
+                // Remove allocations referencing this student
+                await Allocation.deleteMany({ studentId: student._id });
+                // Remove special needs and emergency contacts linked via student _id (regNo)
+                await SpecialNeeds.deleteMany({ regNo: student._id });
+                await EmergencyContact.deleteMany({ regNo: student._id });
+                // Delete the student document
+                await Student.findByIdAndDelete(student._id);
+            }
 
+            // Delete the user record
             await User.findByIdAndDelete(id);
-            return res.json({ Status: 'Success', Message: 'User and related warden removed' });
+            return res.json({ Status: 'Success', Message: 'User and related records removed' });
         } catch (err) {
             console.error('Error deleting user:', err);
             return res.status(500).json({ Error: 'Failed to delete user' });
         }
     }
+
+
 
 
 };

@@ -42,25 +42,54 @@ const RoomController = {
             const {
                 roomID,
                 capasity,
+                gender,
             } = req.body
 
-            if (capasity > 7) {
-                return res.json({ Error: "The Max capasity is 6" })
+            const updateData = {};
+
+            if (capasity !== undefined && capasity !== null && capasity !== '') {
+                const parsedCapasity = Number(capasity);
+                if (Number.isNaN(parsedCapasity) || parsedCapasity < 1) {
+                    return res.json({ Error: "Invalid room capasity" })
+                }
+                if (parsedCapasity > 7) {
+                    return res.json({ Error: "The Max capasity is 6" })
+                }
+                updateData.capasity = parsedCapasity;
+            }
+
+            if (gender !== undefined && gender !== null && gender !== '') {
+                const allowedGenders = ['Male', 'Female', 'REV'];
+                if (!allowedGenders.includes(gender)) {
+                    return res.json({ Error: "Invalid room gender" })
+                }
+                updateData.gender = gender;
+            }
+
+            if (Object.keys(updateData).length === 0) {
+                return res.json({ Error: "No data provided for update" })
             }
 
             const checkroom = await Room.findById(roomID)
+            if (!checkroom) {
+                return res.json({ Error: "Room not found" })
+            }
+
+            if (updateData.capasity !== undefined && checkroom.currentOccupants > updateData.capasity) {
+                return res.json({ Error: "Current occupants exceed new capasity" })
+            }
 
             const updatedRoom = await Room.findByIdAndUpdate(
                 roomID,
-                { $set: { capasity } },
+                { $set: updateData },
                 { new: true }
             );
 
             if (updatedRoom) {
-                return res.json({ Status: "Success", Message: "Room Capasity Updated Success" })
+                return res.json({ Status: "Success", Message: "Room Updated Success", Result: updatedRoom })
             }
             else {
-                return res.json({ Error: "Internal Server Error Whilte Updating Room Capasity" })
+                return res.json({ Error: "Internal Server Error Whilte Updating Room" })
             }
         }
         catch (err) {

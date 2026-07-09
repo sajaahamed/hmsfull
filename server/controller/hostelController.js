@@ -158,13 +158,39 @@ const HostelController = {
 
     getAllhostel: async (req, res) => {
         try {
-            const getallhostel = await Hostel.find().populate('warden')
+            const getallhostel = await Hostel.find().populate('warden').lean();
 
-            return res.json({ Result: getallhostel })
+            const currentYear = new Date().getFullYear().toString();
+            const allRooms = await Room.find({});
+            const allAllocations = await Allocation.find({ active: true, academicYear: currentYear });
 
+            const result = getallhostel.map(hostel => {
+                const hostelRooms = allRooms.filter(r => r.hostelID?.toString() === hostel._id.toString());
+                const totalCapacity = hostelRooms.reduce((sum, room) => sum + (room.capasity || 4), 0);
+
+                const hostelAllocations = allAllocations.filter(a => a.hostelID?.toString() === hostel._id.toString());
+                const uniqueStudents = new Set(hostelAllocations.map(a => {
+                    if (a.studentId) return a.studentId.toString();
+                    if (a.regNo) return a.regNo.toString().toLowerCase();
+                    return null;
+                }).filter(Boolean));
+                const assignedStudents = uniqueStudents.size;
+
+                return {
+                    ...hostel,
+                    totalCapacity,
+                    assignedStudents,
+                    availableCapacity: Math.max(totalCapacity - assignedStudents, 0),
+                    isFull: assignedStudents >= totalCapacity,
+                    occupancyPercentage: totalCapacity > 0 ? Math.min((assignedStudents / totalCapacity) * 100, 100).toFixed(1) : 0
+                };
+            });
+
+            return res.json({ Result: result });
         }
         catch (err) {
-            console.log(err)
+            console.log(err);
+            return res.status(500).json({ error: "Server error" });
         }
     },
 
@@ -231,6 +257,40 @@ const HostelController = {
         } catch (err) {
             console.error("Error updating room count:", err);
             return res.json({ error: "Server error while updating room count" });
+        }
+    },
+
+    updateHostelGender: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { gender } = req.body;
+
+            const allowedGenders = ['Male', 'Female', 'REV'];
+            if (!allowedGenders.includes(gender)) {
+                return res.json({ error: 'Invalid hostel gender' });
+            }
+
+            const hostel = await Hostel.findById(id);
+            if (!hostel) {
+                return res.json({ error: 'Hostel not found' });
+            }
+
+            if (hostel.gender === gender) {
+                return res.json({ Status: 'Success', Message: 'Hostel gender is already up to date.' });
+            }
+
+            hostel.gender = gender;
+            await hostel.save();
+
+            await Room.updateMany({ hostelID: hostel._id }, { $set: { gender } });
+
+            return res.json({
+                Status: 'Success',
+                Message: `Hostel gender updated to ${gender}`,
+            });
+        } catch (err) {
+            console.error('Error updating hostel gender:', err);
+            return res.json({ error: 'Server error while updating hostel gender' });
         }
     },
 
@@ -304,11 +364,17 @@ const HostelController = {
             const rooms = await Room.find({ hostelID: hostelId });
             const totalCapacity = rooms.reduce((sum, room) => sum + (room.capasity || 4), 0);
 
-            const existingAllocationsCount = await Allocation.countDocuments({
+            const existingAllocations = await Allocation.find({
                 hostelID: hostelId,
                 academicYear: new Date().getFullYear().toString(),
                 active: true
             });
+            const uniqueExistingStudents = new Set(existingAllocations.map(a => {
+                if (a.studentId) return a.studentId.toString();
+                if (a.regNo) return a.regNo.toString().toLowerCase();
+                return null;
+            }).filter(Boolean));
+            const existingAllocationsCount = uniqueExistingStudents.size;
 
             const newAllocationsCount = studentIds.length;
 
@@ -343,11 +409,11 @@ const HostelController = {
             for (const student of students) {
                 const usernameVal = student.enrolmentNo || student.nic;
                 if (!usernameVal) continue;
-                
+
                 const existingUser = await User.findOne({ username: usernameVal });
                 if (!existingUser) {
                     const hashedPassword = await bcrypt.hash('12345678', 10);
-                    
+
                     const syntheticEmail = `${usernameVal.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@student.hms.local`;
 
                     const newUser = new User({
@@ -497,6 +563,26 @@ const HostelController = {
         } catch (err) {
             console.error('Error in getWardenStudents:', err);
             res.json({ message: 'Server error', error: err.message });
+        }
+    },
+    // Delete hostel and cascade related data
+    deleteHostel: async (req, res) => {
+        try {
+            const { id } = req.params;
+            const hostel = await Hostel.findById(id);
+            if (!hostel) return res.status(404).json({ error: 'Hostel not found' });
+            // Remove allocations linked to this hostel
+            await Allocation.deleteMany({ hostelID: hostel._id });
+            // Remove rooms belonging to this hostel
+            await Room.deleteMany({ hostelID: hostel._id });
+            // Remove warden assignments for this hostel
+            await Warden.deleteMany({ hostelId: hostel._id });
+            // Finally delete the hostel record
+            await Hostel.findByIdAndDelete(hostel._id);
+            return res.json({ Status: 'Success', Message: 'Hostel and related records removed' });
+        } catch (err) {
+            console.error('Error deleting hostel:', err);
+            return res.status(500).json({ Error: 'Failed to delete hostel' });
         }
     }
 };

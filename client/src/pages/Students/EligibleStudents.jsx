@@ -64,7 +64,7 @@ const EligibleStudents = () => {
 
     const yearOptions = React.useMemo(() => {
         const set = new Set(students.map(s => getYear(s.enrolmentNo)))
-        return [{ value: '', label: 'All' }, ...Array.from(set).filter(Boolean).sort().map(y => ({ value: y, label: `20${y}` }))]
+        return [{ value: '', label: 'Select' }, ...Array.from(set).filter(Boolean).sort().map(y => ({ value: y, label: `20${y}` }))]
     }, [students])
 
     const DepartmentTree = ({ value, onChange }) => {
@@ -116,21 +116,21 @@ const EligibleStudents = () => {
         }, [open])
 
         return (
-            <div className="w-full md:w-40 relative" ref={rootRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <div className="w-full relative" ref={rootRef}>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
                 <div>
                     <div
                         role="button"
                         tabIndex={0}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 transition flex justify-between items-center cursor-pointer"
+                        className="w-full px-3 bg-white border border-gray-300 rounded-md text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 transition flex justify-between items-center cursor-pointer h-[42px]"
                         onClick={() => setOpen(!open)}
                     >
                         <span className="truncate text-sm">{value ? displayLabelForValue(value) : 'Select'}</span>
-                        <span className="text-gray-400">▾</span>
+                        <span className="text-gray-400 text-[10px]">▼</span>
                     </div>
 
                     {open && (
-                        <div className="absolute z-50 mt-1 w-full md:w-48 max-h-56 overflow-auto bg-white border rounded shadow-lg">
+                        <div className="absolute z-50 mt-1 w-full min-w-[200px] max-h-56 overflow-auto bg-white border rounded shadow-lg">
                             <div className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm" onClick={() => { onChange(''); setOpen(false) }}>All Departments</div>
                             {Array.from(map.keys()).sort().map(parent => (
                                 <div key={parent}>
@@ -276,7 +276,7 @@ const EligibleStudents = () => {
     }
 
     return (
-        <div className="p-4 md:p-6 mt-2 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 md:p-6 mt-2 bg-white rounded-xl shadow-sm border border-gray-100 max-w-full overflow-hidden">
             <h1 className="text-xl md:text-2xl font-bold text-[#6b0f14] mb-6 border-b pb-3">Eligibility Management</h1>
 
             <div className="flex gap-4 mb-6 border-b overflow-x-auto whitespace-nowrap scrollbar-hide">
@@ -301,77 +301,78 @@ const EligibleStudents = () => {
                 }
             </p>
 
-            {/* ── Responsive filter bar ── */}
-            <div className="mb-4 flex flex-col md:flex-row md:items-end gap-4">
-                <div className="w-full md:flex-1">
+            {/* ── ALIGNED FILTER BAR ── */}
+            <div className="mb-6 flex flex-col lg:flex-row items-end gap-4 w-full bg-gray-50 p-4 rounded-xl border border-gray-100">
+                
+                {/* Search field gets flex-[1.6] to make it wider than others */}
+                <div className="w-full lg:flex-[1.6]">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Search Records</label>
                     <DefaultInput
-                        label="Search by Name, NIC, Enrolment"
                         name="search"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        placeholder="Search..."
+                        placeholder="Name, NIC, Enrol..."
+                        className="w-full h-[42px]"
                     />
                 </div>
 
-                <div className="w-full md:w-auto md:mb-[20px]">
+                {/* Department dropdown nudged slightly up via -top-[4px] to hit perfect line alignment */}
+                <div className="w-full lg:flex-1 relative -top-[20px]">
                     <DepartmentTree value={departmentFilter} onChange={setDepartmentFilter} />
                 </div>
 
-                <div className="flex flex-row gap-4 w-full md:w-auto">
-                    <div className="flex-1 md:flex-none">
-                        <Dropdown
-                            inline
-                            label="Study Year"
-                            name="yearFilter"
-                            value={yearFilter}
-                            onChange={e => setYearFilter(e.target.value)}
-                            options={yearOptions}
-                            className="w-full md:w-32"
-                        />
-                    </div>
-
-                    <div className="flex-1 md:flex-none">
-                        <Dropdown
-                            inline
-                            label="Gender"
-                            name="genderFilter"
-                            value={genderFilter}
-                            onChange={e => setGenderFilter(e.target.value)}
-                            options={[
-                                { value: '', label: 'All' },
-                                { value: 'Male', label: 'Male' },
-                                { value: 'Female', label: 'Female' },
-                                { value: 'REV', label: 'REV' },
-                            ]}
-                            className="w-full md:w-32"
-                        />
-                    </div>
+                <div className="w-full lg:flex-1">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Study Year</label>
+                    <Dropdown
+                        name="yearFilter"
+                        value={yearFilter}
+                        onChange={e => setYearFilter(e.target.value)}
+                        options={yearOptions}
+                        className="w-full h-[42px]"
+                    />
                 </div>
 
-                <div className="w-full md:w-28">
+                <div className="w-full lg:flex-1">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Gender</label>
+                    <Dropdown
+                        name="genderFilter"
+                        value={genderFilter}
+                        onChange={e => setGenderFilter(e.target.value)}
+                        options={[
+                            { value: '', label: 'Select' },
+                            { value: 'Male', label: 'Male' },
+                            { value: 'Female', label: 'Female' },
+                            { value: 'REV', label: 'REV' },
+                        ]}
+                        className="w-full h-[42px]"
+                    />
+                </div>
+
+                <div className="w-full lg:flex-1">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Min Distance</label>
                     <DefaultInput
-                        label="Distance ≥"
                         type="number"
                         name="distanceFilter"
                         value={distanceFilter}
                         onChange={e => setDistanceFilter(e.target.value)}
                         placeholder="Km"
                         min="0"
+                        className="w-full h-[42px]"
                     />
                 </div>
             </div>
 
             {/* Selection and Action Row */}
-            <div className="mb-6 p-4 md:p-5 bg-[#fefaf0] rounded-lg border border-[#fdf6e3] flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
-                    <label className="flex items-center gap-2">
+            <div className="mb-6 p-4 md:p-5 bg-[#fefaf0] rounded-lg border border-[#fdf6e3] flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
+                    <label className="flex items-center gap-2 cursor-pointer py-1">
                         <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-[#6b0f14] focus:ring-2 focus:ring-[#6b0f14]/30" checked={selectAllVisible} onChange={handleSelectAllChange} />
                         <span className="text-sm font-medium whitespace-nowrap">Select All</span>
                     </label>
 
                     <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                        <label className="text-sm whitespace-nowrap">Select rows:</label>
-                        <select value={selectCount} onChange={handleSelectCountChange} className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 text-sm flex-1 sm:flex-none sm:w-28">
+                        <label className="text-sm whitespace-nowrap text-gray-700">Select rows:</label>
+                        <select value={selectCount} onChange={handleSelectCountChange} className="border border-gray-300 px-3 py-1.5 bg-white rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm w-28">
                             <option value="Custom">Custom</option>
                             <option value="10">10</option>
                             <option value="25">25</option>
@@ -379,14 +380,14 @@ const EligibleStudents = () => {
                             <option value="100">100</option>
                             <option value="All">All</option>
                         </select>
-                        <input type="number" min="1" value={customSelect} onChange={handleCustomSelectChange} placeholder="Count" className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 text-sm flex-1 sm:flex-none sm:w-24" />
+                        <input type="number" min="1" value={customSelect} onChange={handleCustomSelectChange} placeholder="Count" className="border border-gray-300 px-3 py-1.5 bg-white rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm w-24" />
                     </div>
                 </div>
 
-                <div className="w-full sm:w-auto mt-2 sm:mt-0 flex justify-end shrink-0">
+                <div className="w-full lg:w-auto flex justify-end shrink-0">
                     <button
                         onClick={handleToggleEligibility}
-                        className={`w-full sm:w-auto text-white px-6 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg hover:scale-[1.02] transition disabled:opacity-60 disabled:cursor-not-allowed ${activeTab === 'Not Eligible' ? 'bg-gradient-to-r from-[#6b0f14] to-[#4f0a0f]' : 'bg-red-600'}`}
+                        className={`w-full sm:w-auto text-white px-6 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg hover:scale-[1.01] transition disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none ${activeTab === 'Not Eligible' ? 'bg-gradient-to-r from-[#6b0f14] to-[#4f0a0f]' : 'bg-red-600'}`}
                         disabled={selectedStudents.size === 0}
                     >
                         {activeTab === 'Not Eligible' ? `Mark as Eligible (${selectedStudents.size})` : `Revert to Not Eligible (${selectedStudents.size})`}
@@ -394,19 +395,20 @@ const EligibleStudents = () => {
                 </div>
             </div>
 
-            <div className="overflow-x-auto rounded-xl shadow border border-gray-200">
-                <table className="min-w-full text-sm text-left text-gray-600 bg-white">
+            {/* Table Wrapper Container */}
+            <div className="w-full overflow-x-auto rounded-xl shadow border border-gray-200">
+                <table className="w-full table-auto text-sm text-left text-gray-600 bg-white">
                     <thead className="text-xs uppercase bg-[#fdf6e3] text-[#6b0f14] border-b whitespace-nowrap">
                         <tr>
-                            <th className="px-6 py-4 font-semibold">Select</th>
-                            <th className="px-6 py-4 font-semibold">#</th>
-                            <th className="px-6 py-4 font-semibold">Registration No</th>
+                            <th className="px-4 py-4 font-semibold w-12">Select</th>
+                            <th className="px-4 py-4 font-semibold w-10">#</th>
+                            <th className="px-6 py-4 font-semibold whitespace-nowrap">Registration No</th>
                             <th className="px-6 py-4 font-semibold">Student Name</th>
                             <th className="px-6 py-4 font-semibold">Department</th>
-                            <th className="px-6 py-4 font-semibold">Study Year</th>
-                            <th className="px-6 py-4 font-semibold">Gender</th>
-                            <th className="px-6 py-4 font-semibold">Distance (KM)</th>
-                            <th className="px-6 py-4 font-semibold">Status</th>
+                            <th className="px-4 py-4 font-semibold whitespace-nowrap">Study Year</th>
+                            <th className="px-4 py-4 font-semibold">Gender</th>
+                            <th className="px-4 py-4 font-semibold whitespace-nowrap">Distance (KM)</th>
+                            <th className="px-4 py-4 font-semibold">Status</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -420,49 +422,46 @@ const EligibleStudents = () => {
                                 return (
                                     <tr key={std._id}
                                         onClick={() => handleCheckboxChange(std._id)}
-                                        className={`transition-all duration-150 cursor-pointer whitespace-nowrap ${isSelected ? 'bg-[#fdf6e3]' : 'hover:bg-[#fefaf0] border-b'}`}>
-                                        <td className="px-6 py-4">
+                                        className={`transition-all duration-150 cursor-pointer ${isSelected ? 'bg-[#fdf6e3]' : 'hover:bg-[#fefaf0]'}`}>
+                                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                             <input
                                                 type="checkbox"
                                                 checked={isSelected}
-                                                onChange={(e) => {
-                                                    e.stopPropagation()
-                                                    handleCheckboxChange(std._id)
-                                                }}
+                                                onChange={() => handleCheckboxChange(std._id)}
                                                 className="h-4 w-4 rounded border-gray-300 text-[#6b0f14] focus:ring-[#6b0f14]"
                                             />
                                         </td>
-                                        <td className="px-6 py-4 text-gray-800">{index + 1}</td>
-                                        <td className="px-6 py-4 font-medium">{std.enrolmentNo}</td>
-                                        <td className="px-6 py-4">{std.name}</td>
-                                        <td className="px-6 py-4">{mainDept}</td>
-                                        <td className="px-6 py-4">{studyYear}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-4 py-4 text-gray-800">{index + 1}</td>
+                                        <td className="px-6 py-4 font-medium whitespace-nowrap">{std.enrolmentNo}</td>
+                                        <td className="px-6 py-4 font-normal text-gray-900 break-words max-w-[220px]">{std.name}</td>
+                                        <td className="px-6 py-4 text-gray-700 break-words max-w-[180px]">{mainDept}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap">{studyYear}</td>
+                                        <td className="px-4 py-4">
                                             {std.sex === 'Male' ? (
-                                                <span className="flex bg-[#fdf6e3] text-[#6b0f14] w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center">
+                                                <span className="flex bg-[#fdf6e3] text-[#6b0f14] w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center whitespace-nowrap">
                                                     <FaMale className="h-3 w-auto" />
                                                     Male
                                                 </span>
                                             ) : std.sex === 'Female' ? (
-                                                <span className="flex bg-pink-50 text-pink-700 w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center">
+                                                <span className="flex bg-pink-50 text-pink-700 w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center whitespace-nowrap">
                                                     <FaFemale className="h-3 w-auto" />
                                                     Female
                                                 </span>
                                             ) : (
-                                                <span className="flex bg-orange-50 text-orange-700 w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center">
+                                                <span className="flex bg-orange-50 text-orange-700 w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center whitespace-nowrap">
                                                     <FaUserTie className="h-3 w-auto" />
                                                     {std.sex || 'REV'}
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 font-medium">{std.distance || 'N/A'}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-4 py-4 font-medium whitespace-nowrap">{std.distance || 'N/A'}</td>
+                                        <td className="px-4 py-4">
                                             {activeTab === 'Not Eligible' ? (
-                                                <span className="text-xs font-bold px-2.5 py-1 rounded-md border bg-red-100 text-red-700 border-red-200">
+                                                <span className="text-xs font-bold px-2.5 py-1 rounded-md border bg-red-100 text-red-700 border-red-200 whitespace-nowrap">
                                                     Not Eligible
                                                 </span>
                                             ) : (
-                                                <span className="text-xs font-bold px-2.5 py-1 rounded-md border bg-green-100 text-green-700 border-green-200">
+                                                <span className="text-xs font-bold px-2.5 py-1 rounded-md border bg-green-100 text-green-700 border-green-200 whitespace-nowrap">
                                                     Eligible
                                                 </span>
                                             )}

@@ -30,6 +30,7 @@ const WardenManage = () => {
             headers: { 'Authorization': `Bearer ${token}` }
         })
             .then(res => {
+                console.log('🛎️ Fetched wardens – count:', (res.data.Result || []).length);
                 setWardens(res.data.Result || [])
                 setError('')
             })
@@ -244,9 +245,16 @@ const WardenManage = () => {
         }
     }
 
-    const getHostelName = (hostelId) => {
-        const hostel = hostels.find(h => h._id === hostelId)
-        return hostel ? hostel.name : 'N/A'
+    const getHostelName = (hostelData) => {
+        if (!hostelData) return 'N/A';
+        // If the backend populated the hostel data, it's an object with a name property
+        if (typeof hostelData === 'object' && hostelData.name) {
+            return hostelData.name;
+        }
+        // Fallback: if it's just an ID, find it in the hostels array
+        const idString = typeof hostelData === 'object' ? hostelData._id : hostelData;
+        const hostel = hostels.find(h => String(h._id) === String(idString));
+        return hostel ? hostel.name : 'N/A';
     }
 
     const userOptions = users.map(u => ({ value: u._id, label: u.username }))
@@ -259,12 +267,27 @@ const WardenManage = () => {
         return counts
     }, {})
 
+    // Count distinct assigned hostels for stats
+    const assignedHostelCount = React.useMemo(() => {
+        const ids = wardens.map(w => w.hostelId?.toString?.()).filter(Boolean)
+        return new Set(ids).size
+    }, [wardens])
+
     // Users who have the 'warden' role and fewer than two hostel assignments
     const unassignedWardenUsers = users.filter(u => {
         const hasWardenRole = Array.isArray(u.roles) && u.roles.some(r => r.name === 'warden')
         const userId = u._id?.toString?.() || String(u._id)
         return hasWardenRole && (assignmentCounts[userId] || 0) < 2
     })
+
+    // Get all users who have the 'warden' role
+    const wardenUsers = React.useMemo(() => {
+        return users.filter(u => Array.isArray(u.roles) && u.roles.some(r => r.name === 'warden'));
+    }, [users]);
+
+    const totalWardensCount = wardenUsers.length;
+    const activeWardensCount = wardenUsers.filter(u => u.active).length;
+    const inactiveWardensCount = wardenUsers.filter(u => !u.active).length;
 
     return (
         <div className="p-6">
@@ -281,24 +304,30 @@ const WardenManage = () => {
             </div>
 
             {/* Stats Card */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div className="relative bg-[#6b0f14] text-white p-6 rounded-2xl shadow-lg">
                     <div className="text-sm font-medium uppercase tracking-wide text-[#fdf6e3]">
                         Total Wardens
                     </div>
-                    <div className="mt-3 text-4xl font-bold">{wardens.length}</div>
+                    <div className="mt-3 text-4xl font-bold">{totalWardensCount}</div>
                 </div>
                 <div className="relative bg-[#d4af37] text-[#6b0f14] p-6 rounded-2xl shadow-lg">
                     <div className="text-sm font-semibold uppercase tracking-wide">
                         Active Wardens
                     </div>
-                    <div className="mt-3 text-4xl font-bold">{wardens.filter(w => w.active).length}</div>
+                    <div className="mt-3 text-4xl font-bold">{activeWardensCount}</div>
                 </div>
                 <div className="relative bg-blue-600 text-white p-6 rounded-2xl shadow-lg">
                     <div className="text-sm font-medium uppercase tracking-wide">
                         Inactive Wardens
                     </div>
-                    <div className="mt-3 text-4xl font-bold">{wardens.filter(w => !w.active).length}</div>
+                    <div className="mt-3 text-4xl font-bold">{inactiveWardensCount}</div>
+                </div>
+                <div className="relative bg-[#4a90e2] text-white p-6 rounded-2xl shadow-lg">
+                    <div className="text-sm font-medium uppercase tracking-wide">
+                        Assigned Hostels
+                    </div>
+                    <div className="mt-3 text-4xl font-bold">{assignedHostelCount}</div>
                 </div>
             </div>
 

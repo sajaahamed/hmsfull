@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 
 
+
 const DEPARTMENT_MAP = {
     A: 'Arts',
     LLB: 'Law',
@@ -23,6 +24,11 @@ const HostelAssign = () => {
         intakeYear: '',
         department: '',
     })
+    
+    // Excel import filter from DB
+    const [importedFilter, setImportedFilter] = useState(undefined) // undefined = loading, null = no list saved, array = filtered
+    const [importInfo, setImportInfo] = useState(null)
+
     const token = localStorage.getItem('login')
 
     const getMainDept = enrolNo => {
@@ -157,11 +163,11 @@ const HostelAssign = () => {
                         </div>
                         {Array.from(map.keys()).sort().map(parent => (
                             <div key={parent}>
-                                <div className={`px-2 py-1 flex justify-between items-center ${map.get(parent).some(s => s.value === value) ? 'bg-gray-100 font-semibold' : 'hover:bg-gray-50'}`}>
+                                <div className={`px-2 py-1 flex justify-between items-center ${map.get(parent).some(s => s.value === value) || value === `MAIN:${parent}` ? 'bg-gray-100 font-semibold' : 'hover:bg-gray-50'}`}>
                                     <button
                                         type="button"
                                         className="text-left flex-1 truncate px-2 py-0.5 text-xs"
-                                        onClick={() => { setExpanded(expanded === parent ? null : parent); }}
+                                        onClick={() => { onChange(`MAIN:${parent}`); setOpen(false); setExpanded(null); }}
                                     >
                                         {DEPARTMENT_MAP[parent] || parent}
                                     </button>
@@ -230,6 +236,27 @@ const HostelAssign = () => {
             .catch(err => console.log(err))
     }, [token])
 
+    // Fetch the saved Excel import list from DB
+    useEffect(() => {
+        axios.get(import.meta.env.VITE_APP_API + '/eligibility/get-excel-import', {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+            .then(res => {
+                const list = res.data.Result
+                if (list && list.enrolmentNumbers && list.enrolmentNumbers.length > 0) {
+                    setImportedFilter(list.enrolmentNumbers)
+                    setImportInfo(list)
+                } else {
+                    setImportedFilter(null)
+                    setImportInfo(null)
+                }
+            })
+            .catch(() => {
+                setImportedFilter(null)
+                setImportInfo(null)
+            })
+    }, [token])
+
     useEffect(() => {
         axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
             headers: { Authorization: `Bearer ${token}` }
@@ -240,6 +267,14 @@ const HostelAssign = () => {
 
     useEffect(() => {
         let filtered = Array.isArray(getallstudents) ? [...getallstudents] : []
+
+        if (importedFilter !== null && importedFilter !== undefined) {
+            const importSet = new Set(importedFilter)
+            filtered = filtered.filter(student => importSet.has(student.enrolmentNo))
+        } else if (importedFilter === null) {
+            // No DB list saved — show all eligible students normally
+            // filtered stays as is
+        }
 
         if (filters.search.trim() !== '') {
             const searchTerm = filters.search.toLowerCase()
@@ -253,7 +288,6 @@ const HostelAssign = () => {
             const distNum = Number(filters.distance)
             if (!isNaN(distNum)) {
                 filtered = filtered.filter(student => Number(student.distance) >= distNum)
-                filtered = filtered.sort((a, b) => Number(b.distance || 0) - Number(a.distance || 0))
             }
         }
 
@@ -285,8 +319,10 @@ const HostelAssign = () => {
             })
         }
 
+        filtered = filtered.sort((a, b) => Number(b.distance || 0) - Number(a.distance || 0))
+
         setFilteredStudents(filtered)
-    }, [filters, getallstudents])
+    }, [filters, getallstudents, importedFilter])
 
     const visibleStudents = filteredStudents
 
@@ -368,16 +404,39 @@ const HostelAssign = () => {
             return
         }
 
+        const hostelObj = allhostels.find(x => x._id === selectedHostel)
+        const availableCap = hostelObj ? Number(hostelObj.availableCapacity) || 0 : 0
+
+        let finalStudentIds = Array.from(selectedStudents)
+        let skipped = 0
+        let assignedCount = finalStudentIds.length
+
+        if (finalStudentIds.length > availableCap) {
+            assignedCount = availableCap
+            skipped = finalStudentIds.length - availableCap
+            finalStudentIds = finalStudentIds.slice(0, availableCap)
+        }
+
+        if (finalStudentIds.length === 0) {
+            alert('This hostel is currently FULL. No students can be assigned.')
+            return
+        }
+
         const payload = {
             hostelId: selectedHostel,
-            studentIds: Array.from(selectedStudents),
+            studentIds: finalStudentIds,
         }
 
         axios.post(import.meta.env.VITE_APP_API + '/hostel/assign-students', payload, {
             headers: { Authorization: `Bearer ${token}` }
         })
             .then(() => {
-                alert('Students assigned successfully!')
+                if (skipped > 0) {
+                    alert(`Assignment Summary:\n\nAvailable Capacity: ${availableCap}\nAssigned Students: ${assignedCount}\nSkipped Students: ${skipped}\n\nNote: The remaining ${skipped} students were skipped because the hostel reached full capacity.`)
+                } else {
+                    alert('Students assigned successfully!')
+                }
+                
                 setSelectedStudents(new Set())
                 axios.get(import.meta.env.VITE_APP_API + '/eligibility/eligible-for-assignment', {
                     headers: { Authorization: `Bearer ${token}` }
@@ -394,9 +453,30 @@ const HostelAssign = () => {
             })
     }
 
+
     return (
         <div>
-            <h1 className="font-bold text-[#6b0f14] text-xl">Assign Students to Hostels</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+                <h1 className="font-bold text-[#6b0f14] text-xl">Assign Students to Hostels</h1>
+            </div>
+
+            {/* Excel Import Filter Status Banner */}
+            {importedFilter === undefined ? (
+                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-400">
+                    Loading import list...
+                </div>
+            ) : importInfo ? (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 flex items-center justify-between gap-4">
+                    <span>
+                        📋 <strong>Filtered by Excel Import:</strong> Showing <strong>{importedFilter.length}</strong> eligible students from the imported list (uploaded on {new Date(importInfo.importedAt).toLocaleString()}).
+                        &nbsp;Go to <strong>Assign via Excel</strong> to change or clear the list.
+                    </span>
+                </div>
+            ) : (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+                    ✅ No Excel import active — showing <strong>all eligible students</strong>. Use <strong>Assign via Excel</strong> to filter by an uploaded list.
+                </div>
+            )}
 
             <div className="flex flex-nowrap gap-4 mt-4 max-w-5xl overflow-x-auto no-scrollbar pb-2">
                 <div className="flex-grow min-w-[250px]">
@@ -458,8 +538,37 @@ const HostelAssign = () => {
                     name="hostel"
                     value={selectedHostel}
                     onChange={handleHostelChange}
-                    options={allhostels.map(h => ({ label: h.name, value: h._id }))}
+                    options={allhostels.map(h => ({
+                        label: `${h.name} (${h.gender || '?'}) — ${h.isFull ? 'FULL' : `${h.availableCapacity ?? '?'} available`}`,
+                        value: h._id
+                    }))}
                 />
+                {selectedHostel && (() => {
+                    const h = allhostels.find(x => x._id === selectedHostel)
+                    if (!h) return null
+                    const pct = Number(h.occupancyPercentage) || 0
+                    const barColor = pct >= 100 ? 'bg-red-600' : pct >= 80 ? 'bg-orange-500' : 'bg-[#6b0f14]'
+                    const textColor = pct >= 100 ? 'text-red-700' : pct >= 80 ? 'text-orange-700' : 'text-green-700'
+                    return (
+                        <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <span className="text-gray-600">Assigned: <strong className="text-gray-800">{h.assignedStudents ?? 0}</strong></span>
+                                <span className="text-gray-600">Capacity: <strong className="text-gray-800">{h.totalCapacity ?? 0}</strong></span>
+                                {h.isFull ? (
+                                    <span className="font-semibold text-red-700">Available: <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-0.5 rounded-full">FULL</span></span>
+                                ) : (
+                                    <span className={`font-semibold ${textColor}`}>Available: {h.availableCapacity ?? 0}</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-1 min-w-[120px]">
+                                <div className="w-full bg-gray-200 rounded-full h-2 max-w-[160px]">
+                                    <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }}></div>
+                                </div>
+                                <span className="text-xs font-semibold whitespace-nowrap">{pct}%</span>
+                            </div>
+                        </div>
+                    )
+                })()}
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-3 max-w-3xl">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -15,6 +15,157 @@ const getMainDept = enrolNo => {
     if (!enrolNo) return 'N/A';
     const parts = enrolNo.split('/').filter(Boolean);
     return parts[0] || 'N/A';
+};
+
+const getSubDept = enrolNo => {
+    if (!enrolNo) return '';
+    const parts = enrolNo.split('/').filter(Boolean);
+    if (parts.length >= 4) return parts[2] || '';
+    if (parts.length === 3) return parts[0] || '';
+    return '';
+};
+
+const getBatchFromEnrolNo = enrolNo => {
+    if (!enrolNo) return '';
+    const parts = enrolNo.split('/').filter(Boolean);
+    return parts[1] || '';
+};
+
+const getBatchPrefixFromEnrolNo = enrolNo => {
+    if (!enrolNo) return '';
+    const parts = enrolNo.split('/').filter(Boolean);
+    if (parts.length < 2) return '';
+    return `${parts[0]}/${parts[1]}`.toUpperCase();
+};
+
+const getBatchYearFromEnrolNo = enrolNo => {
+    const raw = getBatchFromEnrolNo(enrolNo);
+    if (!raw) return '';
+    if (/^\d{2}$/.test(raw)) return `20${raw}`;
+    if (/^\d{4}$/.test(raw)) return raw;
+    return raw;
+};
+
+const formatDateYmd = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+};
+
+const defaultPaymentFilters = {
+    departmentFilter: '',
+    hostelId: '',
+    batchYear: '',
+    batch: '',
+    residentDateFrom: '',
+    residentDateTo: ''
+};
+
+const DepartmentTreeSelect = ({ options, value, onChange }) => {
+    const [open, setOpen] = useState(false);
+    const [expanded, setExpanded] = useState(null);
+    const rootRef = useRef(null);
+
+    const getLabelForValue = (val) => {
+        if (!val) return 'All Departments';
+        if (val.startsWith('MAIN:')) {
+            const code = val.slice(5);
+            return DEPARTMENT_MAP[code] || code;
+        }
+        if (val.startsWith('SUB:')) return val.slice(4);
+        return val;
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (open && rootRef.current && !rootRef.current.contains(e.target)) {
+                setOpen(false);
+                setExpanded(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [open]);
+
+    return (
+        <div className="relative" ref={rootRef}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <button
+                type="button"
+                onClick={() => setOpen(prev => !prev)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-left text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-500 flex items-center justify-between"
+            >
+                <span className="truncate">{getLabelForValue(value)}</span>
+                <span className="text-gray-400">▾</span>
+            </button>
+
+            {open && (
+                <div className="absolute z-50 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-gray-300 bg-white shadow-lg">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            onChange('');
+                            setOpen(false);
+                            setExpanded(null);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                        All Departments
+                    </button>
+
+                    {options.map((entry) => (
+                        <div key={entry.main} className="border-t border-gray-100">
+                            <div className="flex items-center justify-between px-3 py-2">
+                                <button
+                                    type="button"
+                                    className={`text-left text-sm ${value === `MAIN:${entry.main}` ? 'font-semibold text-gray-900' : 'text-gray-800'}`}
+                                    onClick={() => {
+                                        onChange(`MAIN:${entry.main}`);
+                                    }}
+                                >
+                                    {DEPARTMENT_MAP[entry.main] || entry.main}
+                                </button>
+                                {entry.subs.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="text-gray-400 hover:text-gray-600"
+                                        onClick={() => setExpanded(prev => (prev === entry.main ? null : entry.main))}
+                                    >
+                                        {expanded === entry.main ? '▾' : '▸'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {expanded === entry.main && entry.subs.length > 0 && (
+                                <div className="bg-gray-50 border-t border-gray-100">
+                                    {entry.subs.map((subCode) => (
+                                        <button
+                                            key={`${entry.main}-${subCode}`}
+                                            type="button"
+                                            onClick={() => {
+                                                onChange(`SUB:${subCode}`);
+                                                setOpen(false);
+                                                setExpanded(null);
+                                            }}
+                                            className={`w-full px-6 py-2 text-left text-sm ${value === `SUB:${subCode}` ? 'font-semibold text-gray-900' : 'text-gray-700'} hover:bg-gray-100`}
+                                        >
+                                            {subCode}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 };
 
 // ── Shared styling helpers ────────────────────────────────────────────
@@ -61,6 +212,15 @@ const applyStylesToWorksheet = (worksheet) => {
 
 const Reports = () => {
     const [loadingReport, setLoadingReport] = useState(null);
+    const [showPaymentFilterModal, setShowPaymentFilterModal] = useState(false);
+    const [paymentFilterLoading, setPaymentFilterLoading] = useState(false);
+    const [paymentFilters, setPaymentFilters] = useState(defaultPaymentFilters);
+    const [paymentFilterOptions, setPaymentFilterOptions] = useState({
+        departments: [],
+        batchYears: [],
+        batches: [],
+        hostels: []
+    });
     const token = localStorage.getItem('login');
 
     const fetchStudents = async () => {
@@ -75,6 +235,88 @@ const Reports = () => {
             headers: { Authorization: `Bearer ${token}` }
         });
         return res.data.Result || [];
+    };
+
+    const collectPaymentFilterOptions = async () => {
+        const [students, hostels] = await Promise.all([fetchStudents(), fetchHostels()]);
+
+        const deptMap = new Map();
+        const batchYearSet = new Set();
+        const batchSet = new Set();
+
+        students.forEach((std) => {
+            const enrol = std.enrolmentNo || '';
+            const main = getMainDept(enrol);
+            const sub = getSubDept(enrol);
+            const batch = getBatchPrefixFromEnrolNo(enrol);
+            const batchYear = String(std.batchYear || getBatchYearFromEnrolNo(enrol) || '').trim();
+
+            if (main && main !== 'N/A') {
+                if (!deptMap.has(main)) deptMap.set(main, new Set());
+
+                if (sub && sub !== main) {
+                    deptMap.get(main).add(sub);
+                }
+
+                const parts = enrol.split('/').filter(Boolean);
+                if (parts.length === 3) {
+                    deptMap.get(main).add(main);
+                }
+            }
+
+            if (batchYear) batchYearSet.add(batchYear);
+            if (batch) batchSet.add(batch);
+        });
+
+        const departments = Array.from(deptMap.entries())
+            .map(([mainCode, subSet]) => ({
+                main: mainCode,
+                subs: Array.from(subSet).sort()
+            }))
+            .sort((a, b) => (DEPARTMENT_MAP[a.main] || a.main).localeCompare(DEPARTMENT_MAP[b.main] || b.main));
+
+        return {
+            departments,
+            batchYears: Array.from(batchYearSet).sort(),
+            batches: Array.from(batchSet).sort(),
+            hostels: [...hostels].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+        };
+    };
+
+    const openPaymentFilterModal = async () => {
+        try {
+            setPaymentFilterLoading(true);
+            const options = await collectPaymentFilterOptions();
+            setPaymentFilterOptions(options);
+            setPaymentFilters(defaultPaymentFilters);
+            setShowPaymentFilterModal(true);
+        } catch (error) {
+            console.error('Failed to load payment filters', error);
+            alert('Failed to load payment filters.');
+        } finally {
+            setPaymentFilterLoading(false);
+        }
+    };
+
+    const handlePaymentFilterChange = (field, value) => {
+        setPaymentFilters(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handlePaymentExportWithFilters = async () => {
+        const selectedHostel = paymentFilterOptions.hostels.find(h => h._id === paymentFilters.hostelId);
+
+        const filters = {
+            departmentFilter: paymentFilters.departmentFilter,
+            hostelId: paymentFilters.hostelId,
+            batchYear: paymentFilters.batchYear,
+            batch: paymentFilters.batch,
+            residentDateFrom: paymentFilters.residentDateFrom,
+            residentDateTo: paymentFilters.residentDateTo,
+            selectedHostelName: selectedHostel?.name || '',
+        };
+
+        setShowPaymentFilterModal(false);
+        await handleDownload('payments', () => generatePaymentReport(filters));
     };
 
     // ── 1. Distribution Report ────────────────────────────────────────
@@ -290,7 +532,7 @@ const Reports = () => {
     const generateEligibilityReport = async () => {
         const students = await fetchStudents();
         const groups = {};
-        let grandRegistered = 0, grandEligible = 0, grandMale = 0, grandFemale = 0, grandTotal = 0;
+        let grandRegistered = 0, grandEligible = 0, grandMale = 0, grandFemale = 0, grandRev = 0, grandTotal = 0;
 
         students.forEach(std => {
             const deptCode = getMainDept(std.enrolmentNo);
@@ -335,33 +577,35 @@ const Reports = () => {
 
         worksheet.addRow(['HOSTEL Facillity Allocation and Student Satisfaction']);
         worksheet.addRow([]);
-        worksheet.addRow(['Faculty', 'Batch Year', 'Year of Intake', 'Student Registered', 'No. of Students Eligible for Hostel', 'No. of Students Who Received Hostel', '', '']);
-        worksheet.addRow(['', '', '', '', '', 'Male', 'Female', 'Total']);
+        worksheet.addRow(['Faculty', 'Batch Year', 'Year of Intake', 'Student Registered', 'No. of Students Eligible for Hostel', 'No. of Students Who Received Hostel', '', '', '']);
+        worksheet.addRow(['', '', '', '', '', 'Male', 'Female', 'Rev', 'Total']);
 
         Object.values(groups).sort((a, b) => a.department.localeCompare(b.department)).forEach(g => {
-            const total = g.maleAssigned + g.femaleAssigned;
-            worksheet.addRow([g.department, g.batchYear, g.studyYearLabel, g.registered, g.eligible, g.maleAssigned, g.femaleAssigned, total]);
+            const rev = 0;
+            const total = g.maleAssigned + g.femaleAssigned + rev;
+            worksheet.addRow([g.department, g.batchYear, g.studyYearLabel, g.registered, g.eligible, g.maleAssigned, g.femaleAssigned, rev, total]);
 
             grandRegistered += g.registered;
             grandEligible += g.eligible;
             grandMale += g.maleAssigned;
             grandFemale += g.femaleAssigned;
+            grandRev += rev;
             grandTotal += total;
         });
 
-        worksheet.addRow(['Grand Total', '', '', grandRegistered, grandEligible, grandMale, grandFemale, grandTotal]);
+        worksheet.addRow(['Grand Total', '', '', grandRegistered, grandEligible, grandMale, grandFemale, grandRev, grandTotal]);
 
-        worksheet.mergeCells(1, 1, 1, 8);
+        worksheet.mergeCells(1, 1, 1, 9);
         worksheet.mergeCells(3, 1, 4, 1);
         worksheet.mergeCells(3, 2, 4, 2);
         worksheet.mergeCells(3, 3, 4, 3);
         worksheet.mergeCells(3, 4, 4, 4);
         worksheet.mergeCells(3, 5, 4, 5);
-        worksheet.mergeCells(3, 6, 3, 8);
+        worksheet.mergeCells(3, 6, 3, 9);
         worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 3);
 
         worksheet.columns = [
-            { width: 25 }, { width: 15 }, { width: 18 }, { width: 20 }, { width: 35 }, { width: 12 }, { width: 12 }, { width: 12 }
+            { width: 25 }, { width: 15 }, { width: 18 }, { width: 20 }, { width: 35 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }
         ];
 
         applyStylesToWorksheet(worksheet);
@@ -371,9 +615,21 @@ const Reports = () => {
     };
 
     // ── 5. Payment Report ────────────────────────────
-    const generatePaymentReport = async () => {
+    const generatePaymentReport = async (filters = {}) => {
+
         const url = import.meta.env.VITE_APP_API + '/admin/payments';
-        const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+        const params = {};
+        if (filters.departmentFilter) params.departmentFilter = filters.departmentFilter;
+        if (filters.hostelId) params.hostelId = filters.hostelId;
+        if (filters.batchYear) params.batchYear = filters.batchYear;
+        if (filters.batch) params.batch = filters.batch;
+        if (filters.residentDateFrom) params.residentDateFrom = filters.residentDateFrom;
+        if (filters.residentDateTo) params.residentDateTo = filters.residentDateTo;
+
+        const res = await axios.get(url, {
+            headers: { Authorization: `Bearer ${token}` },
+            params,
+        });
         const payments = res.data.Result || res.data.result || [];
 
         const workbook = new ExcelJS.Workbook();
@@ -382,14 +638,14 @@ const Reports = () => {
         worksheet.addRow([`Hall List - Generated ${new Date().toLocaleDateString()}`]);
         worksheet.addRow([]);
 
-        const headers = ['No', 'Reg No', 'Enrollment No', 'Hostel', 'Room No', 'Hall Fee', 'Date'];
+        const headers = ['No', 'Reg No', 'Enrollment No', 'Hostel', 'Room No', 'Hall Fee', 'Paid Date'];
         worksheet.addRow(headers);
         worksheet.addRow(['', '', '', '', '', '', '']); // Empty row 4 for shared styling compatibility
 
         let totalAmount = 0;
 
         payments.forEach((p, idx) => {
-            const dateStr = p.paidDate ? new Date(p.paidDate).toISOString().split('T')[0] : '-';
+            const dateStr = formatDateYmd(p.paidDate) || '-';
             const amount = Number(p.amount) || 0;
             totalAmount += amount;
 
@@ -416,7 +672,13 @@ const Reports = () => {
         worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 5); // Total label
 
         worksheet.columns = [
-            { width: 8 }, { width: 15 }, { width: 20 }, { width: 25 }, { width: 12 }, { width: 15 }, { width: 15 }
+            { width: 8 },
+            { width: 15 },
+            { width: 20 },
+            { width: 22 },
+            { width: 12 },
+            { width: 15 },
+            { width: 15 }
         ];
 
         applyStylesToWorksheet(worksheet);
@@ -507,21 +769,27 @@ const Reports = () => {
                             </div>
 
                             <button
-                                onClick={() => handleDownload(report.id, report.action)}
-                                disabled={!!loadingReport}
+                                onClick={() => {
+                                    if (report.id === 'payments') {
+                                        openPaymentFilterModal();
+                                        return;
+                                    }
+                                    handleDownload(report.id, report.action);
+                                }}
+                                disabled={!!loadingReport || paymentFilterLoading}
                                 className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-all
                                     ${isLoading
                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : !!loadingReport
+                                        : loadingReport || paymentFilterLoading
                                             ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
                                             : 'bg-[#6b0f14] text-white hover:bg-[#4f0a0f] active:scale-[0.98]'
                                     }
                                 `}
                             >
-                                {isLoading ? (
+                                {isLoading || (paymentFilterLoading && report.id === 'payments') ? (
                                     <>
                                         <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                                        Generating...
+                                        {paymentFilterLoading && report.id === 'payments' ? 'Loading filters...' : 'Generating...'}
                                     </>
                                 ) : (
                                     <>
@@ -534,6 +802,102 @@ const Reports = () => {
                     );
                 })}
             </div>
+
+            {showPaymentFilterModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+                        <h2 className="text-xl font-semibold text-gray-800 mb-1">Hall List Filters</h2>
+                        <p className="text-sm text-gray-500 mb-6">Select filters for department, hostel, batch year, batch, and resident date.</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <DepartmentTreeSelect
+                                options={paymentFilterOptions.departments}
+                                value={paymentFilters.departmentFilter}
+                                onChange={(val) => handlePaymentFilterChange('departmentFilter', val)}
+                            />
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Hostel</label>
+                                <select
+                                    value={paymentFilters.hostelId}
+                                    onChange={(e) => handlePaymentFilterChange('hostelId', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                >
+                                    <option value="">All Hostels</option>
+                                    {paymentFilterOptions.hostels.map(h => (
+                                        <option key={h._id} value={h._id}>{h.name || 'Hostel'}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Batch Year</label>
+                                <select
+                                    value={paymentFilters.batchYear}
+                                    onChange={(e) => handlePaymentFilterChange('batchYear', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                >
+                                    <option value="">All Batch Years</option>
+                                    {paymentFilterOptions.batchYears.map(year => (
+                                        <option key={year} value={year}>{year}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
+                                <select
+                                    value={paymentFilters.batch}
+                                    onChange={(e) => handlePaymentFilterChange('batch', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                >
+                                    <option value="">All Batches</option>
+                                    {paymentFilterOptions.batches.map(batch => (
+                                        <option key={batch} value={batch}>{batch}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Resident Date From</label>
+                                <input
+                                    type="date"
+                                    value={paymentFilters.residentDateFrom}
+                                    onChange={(e) => handlePaymentFilterChange('residentDateFrom', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Resident Date To</label>
+                                <input
+                                    type="date"
+                                    value={paymentFilters.residentDateTo}
+                                    onChange={(e) => handlePaymentFilterChange('residentDateTo', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowPaymentFilterModal(false)}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePaymentExportWithFilters}
+                                className="rounded-lg bg-[#6b0f14] px-4 py-2 text-sm font-medium text-white hover:bg-[#4f0a0f]"
+                            >
+                                Export Hall List
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

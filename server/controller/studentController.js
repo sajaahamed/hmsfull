@@ -710,6 +710,7 @@ const StudentController = {
                 name,
                 alDistrict,
                 sex,
+                gender,
                 nic,
                 address1,
                 address2,
@@ -751,7 +752,7 @@ const StudentController = {
                 enrolmentNo,
                 name,
                 alDistrict,
-                sex: normalizeGender(sex),
+                sex: normalizeGender(gender || sex),
                 nic,
                 address1,
                 address2,
@@ -944,6 +945,7 @@ const StudentController = {
                 name,
                 alDistrict,
                 sex,
+                gender,
                 address1,
                 address2,
                 address3,
@@ -953,13 +955,14 @@ const StudentController = {
                 distance
             } = req.body;
 
-            // Always recalculate when address is present — ensures Transit DM API is used
-            let computedDistance    = distance || null;
+            // Only auto-calculate distance if it's 0 or empty
+            let computedDistance    = (distance && Number(distance) !== 0) ? Number(distance) : null;
             let computedDurationSec  = null;
             let computedDurationText = null;
             let computedDistSource   = null;
             const hasAddress = address3 || fullAddress || address1 || address2;
-            if (hasAddress) {
+            
+            if (!computedDistance && hasAddress) {
                 const originAddress = fullAddress
                     || [address1, address2, address3].filter(Boolean).join(', ')
                     || address3;
@@ -974,6 +977,8 @@ const StudentController = {
                     computedDistSource   = distResult.source;
                     console.log(`[updateStudent] ${id} → ${computedDistance} km (${computedDurationText || 'n/a'}) via ${computedDistSource}`);
                 }
+            } else if (computedDistance) {
+                computedDistSource = 'Manual update';
             }
 
             let editorName = 'Admin';
@@ -989,7 +994,7 @@ const StudentController = {
                 {
                     name,
                     alDistrict,
-                    sex: normalizeGender(sex),
+                    sex: normalizeGender(gender || sex),
                     address1,
                     address2,
                     address3,
@@ -1192,6 +1197,42 @@ const StudentController = {
         }
     }
 
+};
+
+// Delete student and linked user
+StudentController.deleteStudent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const student = await Student.findById(id);
+        if (!student) return res.status(404).json({ error: 'Student not found' });
+
+        // Delete related allocations, special needs, emergency contacts
+        const Allocation = require('../model/Allocation');
+        const SpecialNeeds = require('../model/SpecialNeeds');
+        const EmergencyContact = require('../model/EmergencyContact');
+
+        await Allocation.deleteMany({ studentId: student._id });
+        await SpecialNeeds.deleteMany({ regNo: student._id });
+        await EmergencyContact.deleteMany({ regNo: student._id });
+
+        // Delete synthetic user if exists
+        const user = await User.findOne({ username: student.enrolmentNo });
+        if (user) {
+            const Warden = require('../model/Warden');
+            const Hostel = require('../model/Hostel');
+            await Hostel.updateMany({ warden: user._id }, { $unset: { warden: "" } });
+            await Warden.deleteMany({ userId: user._id });
+            await User.findByIdAndDelete(user._id);
+        }
+
+        // Delete the student document
+        await Student.findByIdAndDelete(student._id);
+
+        return res.json({ Status: 'Success', Message: 'Student and related records removed' });
+    } catch (err) {
+        console.error('Error deleting student:', err);
+        return res.status(500).json({ Error: 'Failed to delete student' });
+    }
 };
 
 module.exports = StudentController;

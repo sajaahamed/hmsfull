@@ -10,7 +10,7 @@ const RoomSchema = new mongoose.Schema({
     }],
     gender: {
         type: String,
-        enum: ['Male', 'Female'],
+        enum: ['Male', 'Female', 'REV'],
         required: true,
     },
     hostelID: { type: mongoose.Schema.Types.ObjectId, ref: 'Hostel' },

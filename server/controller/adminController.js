@@ -4,11 +4,58 @@ const Student = require("../model/Student");
 const SpecialNeeds = require("../model/SpecialNeeds");
 const XLSX = require('xlsx');
 
+const parseEnrolParts = (enrolmentNo) => String(enrolmentNo || '').split('/').filter(Boolean);
+
+const getMainDeptFromEnrol = (enrolmentNo) => {
+    const parts = parseEnrolParts(enrolmentNo);
+    return parts[0] || '';
+};
+
+const getSubDeptFromEnrol = (enrolmentNo) => {
+    const parts = parseEnrolParts(enrolmentNo);
+    if (parts.length >= 4) return parts[2] || '';
+    if (parts.length === 3) return parts[0] || '';
+    return '';
+};
+
+const getBatchFromEnrol = (enrolmentNo) => {
+    const parts = parseEnrolParts(enrolmentNo);
+    return parts[1] || '';
+};
+
+const getBatchPrefixFromEnrol = (enrolmentNo) => {
+    const parts = parseEnrolParts(enrolmentNo);
+    if (parts.length < 2) return '';
+    return `${parts[0]}/${parts[1]}`.toUpperCase();
+};
+
+const normalizeBatchYear = (value) => {
+    const val = String(value || '').trim();
+    if (!val) return '';
+    if (/^\d{2}$/.test(val)) return `20${val}`;
+    return val;
+};
+
+const normalizeDate = (value, isEndOfDay = false) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    if (isEndOfDay) {
+        date.setHours(23, 59, 59, 999);
+    } else {
+        date.setHours(0, 0, 0, 0);
+    }
+    return date;
+};
+
 const AdminController = {
     // Admin: Get all students in hostel(s) with their payment status
     getPayments: async (req, res) => {
         try {
-            const { hostelId } = req.query;
+            const { hostelId, departmentFilter, batch, batchYear, residentDateFrom, residentDateTo } = req.query;
+
+            const residentFrom = normalizeDate(residentDateFrom, false);
+            const residentTo = normalizeDate(residentDateTo, true);
 
             // Build allocation query — filter by hostel if provided
             const allocQuery = { active: true };
@@ -20,7 +67,7 @@ const AdminController = {
             const allocs = await Allocation.find(allocQuery)
                 .populate('roomId')
                 .populate('hostelID')
-                .populate('studentId', 'fullName enrolmentNo name nic no _id');
+                .populate('studentId', 'fullName enrolmentNo name nic no _id hostelAssignedDate department batchYear');
 
             // Collect student ObjectIds and Enrolment Numbers
             const objectIdPattern = /^[0-9a-fA-F]{24}$/;
@@ -43,10 +90,10 @@ const AdminController = {
             
             const promises = [];
             if (enrolmentNos.length > 0) {
-                promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id'));
+                promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id hostelAssignedDate department batchYear'));
             }
             if (objectIdsFromRegNo.length > 0) {
-                promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id'));
+                promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id hostelAssignedDate department batchYear'));
             }
             
             const studentResults = await Promise.all(promises);
@@ -110,11 +157,57 @@ const AdminController = {
 
                 const p = paymentsMap[sidStr] || null;
 
+                const enrolmentNo = String(studentObj.enrolmentNo || '');
+                const mainDept = getMainDeptFromEnrol(enrolmentNo);
+                const subDept = getSubDeptFromEnrol(enrolmentNo);
+                const enrolBatch = getBatchFromEnrol(enrolmentNo);
+                const enrolBatchYear = normalizeBatchYear(enrolBatch);
+                const enrolBatchPrefix = getBatchPrefixFromEnrol(enrolmentNo);
+                const studentBatch = String(studentObj.batchYear || '').trim();
+                const normalizedBatch = String(batch || '').trim();
+                const normalizedBatchYear = normalizeBatchYear(batchYear);
+                const residentDate = a.inDate || studentObj.hostelAssignedDate || null;
+
+                if (departmentFilter) {
+                    const filterValue = String(departmentFilter).trim();
+                    if (filterValue.startsWith('MAIN:')) {
+                        const code = filterValue.slice(5).toUpperCase();
+                        if (mainDept.toUpperCase() !== code) continue;
+                    } else if (filterValue.startsWith('SUB:')) {
+                        const code = filterValue.slice(4).toUpperCase();
+                        if (subDept.toUpperCase() !== code) continue;
+                    } else {
+                        const code = filterValue.toUpperCase();
+                        if (mainDept.toUpperCase() !== code && subDept.toUpperCase() !== code) continue;
+                    }
+                }
+
+                if (normalizedBatchYear) {
+                    const studentBatchYear = normalizeBatchYear(studentBatch);
+                    const batchYearMatch = enrolBatchYear === normalizedBatchYear || studentBatchYear === normalizedBatchYear;
+                    if (!batchYearMatch) continue;
+                }
+
+                if (normalizedBatch) {
+                    const requestedBatch = normalizedBatch.toUpperCase();
+                    const batchMatch = enrolBatchPrefix === requestedBatch;
+                    if (!batchMatch) continue;
+                }
+
+                if (residentFrom || residentTo) {
+                    if (!residentDate) continue;
+                    const residentDateObj = new Date(residentDate);
+                    if (Number.isNaN(residentDateObj.getTime())) continue;
+                    if (residentFrom && residentDateObj < residentFrom) continue;
+                    if (residentTo && residentDateObj > residentTo) continue;
+                }
+
                 results.push({
                     _id: p ? p._id : a._id,
                     studentId: studentObj,
                     hostelName: a.hostelID ? a.hostelID.name : null,
                     roomNo: a.roomId ? a.roomId.roomID : null,
+                    residentDate,
                     amount: p ? p.amount : 0,
                     paidDate: p ? p.paidDate : null,
                     paymentStatus: p ? (p.paymentStatus || 'Paid') : 'Pending'

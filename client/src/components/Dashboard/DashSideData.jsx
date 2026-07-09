@@ -1,6 +1,6 @@
 import { MdBedroomParent, MdDashboard, MdAdminPanelSettings } from "react-icons/md";
 import { FaSchool, FaUserGraduate, FaGear } from "react-icons/fa6";
-import { FaUserCog, FaUsers, FaUserLock, FaMoneyBillWave } from "react-icons/fa";
+import { FaUserCog, FaUsers, FaUserLock, FaMoneyBillWave, FaFileExcel } from "react-icons/fa";
 import { MdContactEmergency } from "react-icons/md";
 import { FaHouseUser } from "react-icons/fa";
 import { TbReportAnalytics } from "react-icons/tb";
@@ -120,6 +120,12 @@ const dashsidedata = [
         name: 'Reports',
         link: '/Dashboard/Reports',
         icon: TbReportAnalytics
+    },
+    {
+        id: 21,
+        name: 'Assign via Excel',
+        link: '/Dashboard/Assign-via-excel',
+        icon: FaFileExcel
     },
 ]
 

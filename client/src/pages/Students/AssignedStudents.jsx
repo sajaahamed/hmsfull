@@ -1,5 +1,5 @@
 import axios from 'axios'
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import DefaultInput from '../../components/Form/DefaultInput'
 import { FaFemale, FaMale, FaUserTie } from 'react-icons/fa'
 import Dropdown from '../../components/Form/Dropdown'
@@ -20,22 +20,21 @@ const AssignedStudents = () => {
     const [genderFilter, setGenderFilter] = useState('')
     const [departmentFilter, setDepartmentFilter] = useState('')
     const [yearFilter, setYearFilter] = useState('')
+    const [hostelFilter, setHostelFilter] = useState('')
 
-    const [currentPage, setCurrentPage] = useState(1)
-    const recordsPerPage = 15
     const token = localStorage.getItem('login')
 
-    const fetchStudents = () => {
+    const fetchStudents = useCallback(() => {
         axios.get(import.meta.env.VITE_APP_API + '/eligibility/assigned-students', {
             headers: { Authorization: `Bearer ${token}` }
         }).then(res => {
             setStudents(res.data.Result || [])
         }).catch(err => console.error(err))
-    }
+    }, [token]);
 
     useEffect(() => {
         fetchStudents()
-    }, [token])
+    }, [fetchStudents])
 
     const getMainDept = enrolNo => {
         if (!enrolNo) return ''
@@ -55,7 +54,12 @@ const AssignedStudents = () => {
 
     const yearOptions = React.useMemo(() => {
         const set = new Set(students.map(s => getYear(s.enrolmentNo)))
-        return [{ value: '', label: 'All' }, ...Array.from(set).filter(Boolean).sort().map(y => ({ value: y, label: `20${y}` }))]
+        return [{ value: '', label: 'All Years' }, ...Array.from(set).filter(Boolean).sort().map(y => ({ value: y, label: `20${y}` }))]
+    }, [students])
+
+    const hostelOptions = React.useMemo(() => {
+        const set = new Set(students.map(s => s.hostelName))
+        return [{ value: '', label: 'All Hostels' }, ...Array.from(set).filter(Boolean).sort().map(h => ({ value: h, label: h }))]
     }, [students])
 
     // Department tree dropdown
@@ -87,7 +91,7 @@ const AssignedStudents = () => {
                 out.set(k, arr)
             }
             return out
-        }, [students])
+        }, [])
 
         const displayLabelForValue = (val) => {
             if (!val) return ''
@@ -182,30 +186,70 @@ const AssignedStudents = () => {
             }
 
             const matchesYear = yearFilter === '' || getYear(student.enrolmentNo) === yearFilter
+            const matchesHostel = hostelFilter === '' || student.hostelName === hostelFilter
 
-            return matchesSearch && matchesGender && matchesDepartment && matchesYear
+            return matchesSearch && matchesGender && matchesDepartment && matchesYear && matchesHostel
         })
 
         setFilteredList(filtered)
-        setCurrentPage(1)
-    }, [searchTerm, students, genderFilter, departmentFilter, yearFilter])
+    }, [searchTerm, students, genderFilter, departmentFilter, yearFilter, hostelFilter])
 
+    // Unassignment Logic
+    const [selectedStudents, setSelectedStudents] = useState(new Set())
+    const [showUnassignModal, setShowUnassignModal] = useState(false)
+    const [isUnassigning, setIsUnassigning] = useState(false)
 
-    const totalPages = Math.ceil(filteredList.length / recordsPerPage)
-    const paginatedData = filteredList.slice(
-        (currentPage - 1) * recordsPerPage,
-        currentPage * recordsPerPage
-    )
+    const toggleStudent = (id) => {
+        const newSet = new Set(selectedStudents)
+        if (newSet.has(id)) newSet.delete(id)
+        else newSet.add(id)
+        setSelectedStudents(newSet)
+    }
+
+    const toggleAll = () => {
+        if (selectedStudents.size === filteredList.length) {
+            setSelectedStudents(new Set())
+        } else {
+            const newSet = new Set(selectedStudents)
+            filteredList.forEach(std => newSet.add(std.allocationId || std._id))
+            setSelectedStudents(newSet)
+        }
+    }
+
+    const handleUnassign = async () => {
+        setIsUnassigning(true)
+        try {
+            await axios.post(import.meta.env.VITE_APP_API + '/eligibility/unassign-students', {
+                allocationIds: Array.from(selectedStudents)
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setShowUnassignModal(false)
+            setSelectedStudents(new Set())
+            fetchStudents()
+        } catch (err) {
+            console.error("Error unassigning students:", err)
+            alert("Failed to unassign students. Please try refreshing the page and try again.")
+            setShowUnassignModal(false)
+        } finally {
+            setIsUnassigning(false)
+        }
+    }
 
     return (
         <div className="p-6 mt-2 bg-white rounded-xl shadow-sm border border-gray-100">
             <h1 className="text-2xl font-bold text-[#6b0f14] mb-6 border-b pb-3">Assigned Students</h1>
 
-            <p className="text-sm text-gray-500 mb-6">
-                Students listed below have been <span className="font-semibold text-green-600">successfully allocated to a hostel</span>.
-            </p>
+            <div className="flex justify-between items-center mb-6">
+                <p className="text-sm text-gray-500">
+                    Students listed below have been <span className="font-semibold text-green-600">successfully allocated to a hostel</span>.
+                </p>
+                <div className="text-sm text-gray-600 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-sm">
+                    Showing <span className="font-bold text-[#6b0f14]">{filteredList.length}</span> results
+                </div>
+            </div>
 
-            <div className="mb-4 flex flex-wrap items-end gap-4">
+            <div className="mb-6 flex flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[200px] mb-5">
                     <DefaultInput
                         label="Search by Name, NIC, Enrolment"
@@ -232,12 +276,23 @@ const AssignedStudents = () => {
                 <div className="mb-[20px]">
                     <Dropdown
                         inline
+                        label="Hostel"
+                        name="hostelFilter"
+                        value={hostelFilter}
+                        onChange={e => setHostelFilter(e.target.value)}
+                        options={hostelOptions}
+                        className="w-32 mb-5"
+                    />
+                </div>
+                <div className="mb-[20px]">
+                    <Dropdown
+                        inline
                         label="Gender"
                         name="genderFilter"
                         value={genderFilter}
                         onChange={e => setGenderFilter(e.target.value)}
                         options={[
-                            { value: '', label: 'All' },
+                            { value: '', label: 'All Gender' },
                             { value: 'Male', label: 'Male' },
                             { value: 'Female', label: 'Female' },
                             { value: 'REV', label: 'REV' },
@@ -247,12 +302,36 @@ const AssignedStudents = () => {
                 </div>
             </div>
 
+            {selectedStudents.size > 0 && (
+                <div className="bg-[#fff8f8] border border-[#ffcdd2] rounded-lg p-4 mb-6 flex justify-between items-center shadow-sm">
+                    <span className="text-[#6b0f14] font-semibold flex items-center gap-2">
+                        <div className="bg-[#6b0f14] text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
+                            {selectedStudents.size}
+                        </div>
+                        Students Selected for Unassignment
+                    </span>
+                    <button
+                        onClick={() => setShowUnassignModal(true)}
+                        className="bg-[#6b0f14] hover:bg-[#80141a] text-white px-5 py-2 rounded-md font-medium transition-colors shadow-sm"
+                    >
+                        Unassign Selected Students
+                    </button>
+                </div>
+            )}
+
             <div className="overflow-x-auto rounded-xl shadow border border-gray-200">
                 <table className="min-w-full text-sm text-left text-gray-600 bg-white">
                     <thead className="text-xs uppercase bg-[#fdf6e3] text-[#6b0f14] border-b">
                         <tr>
-                            <th className="px-6 py-4 font-semibold">#</th>
-                            <th className="px-6 py-4 font-semibold">Registration No</th>
+                            <th className="px-6 py-4 font-semibold w-10">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300 text-[#6b0f14] focus:ring-[#6b0f14]"
+                                    onChange={toggleAll}
+                                    checked={filteredList.length > 0 && selectedStudents.size === filteredList.length}
+                                />
+                            </th>
+                            <th className="px-6 py-4 font-semibold">Enrollment No</th>
                             <th className="px-6 py-4 font-semibold">Student Name</th>
                             <th className="px-6 py-4 font-semibold">Study Year</th>
                             <th className="px-6 py-4 font-semibold">Gender</th>
@@ -263,25 +342,38 @@ const AssignedStudents = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {paginatedData.length > 0 ? (
-                            paginatedData.map((std, index) => {
+                        {filteredList.length > 0 ? (
+                            filteredList.map((std) => {
                                 const studyYear = std.dateOfEnrolment ? `Year ${(new Date().getFullYear() - new Date(std.dateOfEnrolment).getFullYear()) + 1}` : ''
 
+                                const normalizedSex = (std.sex || '').trim().toLowerCase();
+                                const rowId = std.allocationId || std._id;
+                                const isSelected = selectedStudents.has(rowId);
+
                                 return (
-                                    <tr key={std._id} className="transition-all duration-150 hover:bg-[#fefaf0] border-b">
-                                        <td className="px-6 py-4 text-gray-800">
-                                            {(currentPage - 1) * recordsPerPage + index + 1}
+                                    <tr
+                                        key={rowId}
+                                        onClick={() => toggleStudent(rowId)}
+                                        className={`transition-all duration-150 border-b cursor-pointer ${isSelected ? 'bg-red-50' : 'hover:bg-[#fefaf0]'}`}
+                                    >
+                                        <td className="px-6 py-4">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-gray-300 text-[#6b0f14] focus:ring-[#6b0f14] pointer-events-none"
+                                                checked={isSelected}
+                                                readOnly
+                                            />
                                         </td>
                                         <td className="px-6 py-4 font-medium">{std.enrolmentNo}</td>
                                         <td className="px-6 py-4">{std.name}</td>
                                         <td className="px-6 py-4">{studyYear}</td>
                                         <td className="px-6 py-4">
-                                            {std.sex === 'Male' ? (
+                                            {['male', 'm'].includes(normalizedSex) ? (
                                                 <span className="flex bg-[#fdf6e3] text-[#6b0f14] w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center">
                                                     <FaMale className="h-3 w-auto" />
                                                     Male
                                                 </span>
-                                            ) : std.sex === 'Female' ? (
+                                            ) : ['female', 'f'].includes(normalizedSex) ? (
                                                 <span className="flex bg-pink-50 text-pink-700 w-fit text-xs font-semibold px-2 py-1 rounded-md gap-1 items-center">
                                                     <FaFemale className="h-3 w-auto" />
                                                     Female
@@ -317,26 +409,46 @@ const AssignedStudents = () => {
                 </table>
             </div>
 
-            {totalPages > 1 && (
-                <div className="mt-6 flex justify-between items-center text-sm text-gray-600">
-                    <div>
-                        Showing <span className="font-medium">{(currentPage - 1) * recordsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * recordsPerPage, filteredList.length)}</span> of <span className="font-medium">{filteredList.length}</span> results
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                            disabled={currentPage === 1}
-                            className="px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed bg-white shadow-sm transition-colors"
-                        >
-                            Previous
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                            className="px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed bg-white shadow-sm transition-colors"
-                        >
-                            Next
-                        </button>
+            {/* Unassign Confirmation Modal */}
+            {showUnassignModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                        <div className="bg-red-50 p-6 flex flex-col items-center border-b border-red-100">
+                            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 text-center">Confirm Unassignment</h3>
+                            <p className="text-sm text-gray-500 mt-2 text-center">
+                                You are about to unassign <span className="font-bold text-red-600">{selectedStudents.size}</span> student(s) from their hostels.
+                            </p>
+                        </div>
+                        <div className="p-6 bg-gray-50 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowUnassignModal(false)}
+                                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:ring-4 focus:outline-none focus:ring-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUnassign}
+                                disabled={isUnassigning}
+                                className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                                {isUnassigning ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Processing...
+                                    </>
+                                ) : (
+                                    "Yes, Unassign"
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

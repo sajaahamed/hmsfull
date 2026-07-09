@@ -14,7 +14,8 @@ router.post('/process-uploaded-file', authMiddleware, checkPermission('create-st
 // Debug route (no auth) — compare Directions vs Distance Matrix for a single origin
 router.get('/debug-distance', StudentController.debugDistance)
 
-router.post('/create-student-manually', authMiddleware, checkPermission('create-student-manually'), StudentController.createStudentManually)
+router.post('/create-student-manually', authMiddleware, checkPermission('create-student-manually'), StudentController.createStudentManually);
+router.delete('/delete-student/:id', authMiddleware, checkPermission('delete-student'), StudentController.deleteStudent);
 
 router.get('/get-all-students-auth', authMiddleware, checkPermission('get-all-students-auth'), StudentController.studentGetall)
 

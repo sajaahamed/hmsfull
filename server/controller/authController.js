@@ -455,8 +455,8 @@ const authController = {
         }
     },
 
-    getmebyemail: async(req, res) => {
-        try{
+    getmebyemail: async (req, res) => {
+        try {
             const authHeader = req.headers['authorization'];
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
                 return res.json({ Error: "Unauthorized: Missing or invalid token" });
@@ -467,11 +467,16 @@ const authController = {
             const email = decoded.user.email;
 
             const user = await User.findOne({ email }).select('-password').populate('roles');
-
-            return res.json({ Result: user })
+            let assignedHostels = [];
+            if (user && user.roles && user.roles.some(r => r.name === 'warden')) {
+                const { getActiveWardenAssignments } = require('../utils/wardenAssignments');
+                const assignments = await getActiveWardenAssignments(user._id);
+                assignedHostels = assignments.map(a => a.hostelId).filter(Boolean);
+            }
+            return res.json({ Result: user, Hostels: assignedHostels })
 
         }
-        catch(err){
+        catch (err) {
             console.log(err)
         }
     },
@@ -560,42 +565,34 @@ const authController = {
                 return res.status(400).json({ Status: "Error", Message: "Role and Permission are required" });
             }
 
-            let existingRole = await Role.findOne({ name: role.toLowerCase() });
+            // Support comma‑separated role names (e.g., "admin, director")
+            const roleNames = role.split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
+            const results = [];
 
-            if (!existingRole) {
-                // Create new role
-                const newRole = new Role({
-                    name: role.toLowerCase(),
-                    permissions: [permission] // Wrap in array
-                });
-
-                const savedRole = await newRole.save();
-                return res.json({
-                    Status: "Success",
-                    Message: "New Role Created with Permission",
-                    data: savedRole
-                });
-            } else {
-                // Update permissions only if not already present
-                if (!existingRole.permissions.includes(permission)) {
-                    existingRole.permissions.push(permission);
-                    await existingRole.save();
-                    return res.json({
-                        Status: "Success",
-                        Message: "Permission added to existing Role",
-                        data: existingRole
+            for (const roleName of roleNames) {
+                let existingRole = await Role.findOne({ name: roleName });
+                if (!existingRole) {
+                    const newRole = new Role({
+                        name: roleName,
+                        permissions: [permission]
                     });
+                    const saved = await newRole.save();
+                    results.push({ role: roleName, action: 'created', data: saved });
                 } else {
-                    return res.json({
-                        Status: "Success",
-                        Message: "Permission already exists in Role",
-                        data: existingRole
-                    });
+                    if (!existingRole.permissions.includes(permission)) {
+                        existingRole.permissions.push(permission);
+                        await existingRole.save();
+                        results.push({ role: roleName, action: 'updated', data: existingRole });
+                    } else {
+                        results.push({ role: roleName, action: 'unchanged', data: existingRole });
+                    }
                 }
             }
-        }
-        catch (err) {
-            console.log(err)
+
+            return res.json({ Status: "Success", Message: "Permissions processed", results });
+        } catch (err) {
+            console.log(err);
+            return res.status(500).json({ Status: "Error", Message: err.message });
         }
     },
 

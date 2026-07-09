@@ -2,8 +2,7 @@ import axios from 'axios'
 import React, { useEffect, useState } from 'react'
 
 import { FaFemale, FaMale } from 'react-icons/fa'
-import DefaultBtn from '../../components/Buttons/DefaultBtn'
-import { Link } from 'react-router-dom'
+
 
 const WardenRooms = () => {
     const [rooms, setRooms] = useState([])
@@ -11,6 +10,7 @@ const WardenRooms = () => {
     const [currentPage, setCurrentPage] = useState(1)
     const recordsPerPage = 15
     const token = localStorage.getItem('login')
+    const [wardenHostels, setWardenHostels] = useState([]);
 
     useEffect(() => {
         axios
@@ -21,7 +21,18 @@ const WardenRooms = () => {
                 setRooms(res.data.rooms || [])
             })
             .catch(err => console.log(err))
-    }, [])
+    },)
+
+    // Fetch warden profile to get assigned hostels
+    useEffect(() => {
+        axios.get(import.meta.env.VITE_APP_API + '/auth/get-currentuser-data', {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(res => {
+                setWardenHostels(res.data.Hostels || []);
+            })
+            .catch(err => console.log(err));
+    }, [token]);
 
     // Filter rooms by search term (roomID or student names)
     const filteredRooms = rooms.filter(room => {
@@ -41,6 +52,19 @@ const WardenRooms = () => {
 
     return (
         <div className="mt-8">
+            {/* Assigned Hostels Section */}
+            {wardenHostels.length > 0 && (
+                <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    <h2 className="text-lg font-semibold text-[#6b0f14] mb-2">Assigned Hostels</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {wardenHostels.map((hostel, idx) => (
+                            <span key={idx} className="bg-[#fdf6e3] text-[#6b0f14] text-sm font-medium px-3 py-1 rounded-full">
+                                {hostel.name}{hostel.gender ? ` (${hostel.gender})` : ''}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
             <div className="mb-4 flex items-center gap-8">
                 <input
                     type="text"
@@ -94,10 +118,14 @@ const WardenRooms = () => {
                                                 <FaMale className="h-4 w-auto" />
                                                 Male
                                             </span>
-                                        ) : (
+                                        ) : room.gender === 'Female' ? (
                                             <span className="flex bg-pink-100 text-pink-700 text-xs font-semibold px-3 py-1 rounded-full gap-1 items-center">
                                                 <FaFemale className="h-4 w-auto" />
                                                 Female
+                                            </span>
+                                        ) : (
+                                            <span className="flex bg-gray-100 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full gap-1 items-center">
+                                                REV
                                             </span>
                                         )}
                                     </td>

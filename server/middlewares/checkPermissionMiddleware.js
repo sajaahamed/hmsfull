@@ -64,6 +64,14 @@ const checkPermission = (requiredPermission) => {
                 }
             }
 
+            // Rooms/Hostels: allow admins to update room capacity and count
+            if (requiredPermission === 'update-room-capasity' || requiredPermission === 'update-room-count') {
+                const roleNames = user.roles.map(r => r.name);
+                if (roleNames.includes('admin') || roleNames.includes('director')) {
+                    return next();
+                }
+            }
+
             if (!allPermissions.includes(requiredPermission)) {
                 // Debug logging to help identify permission issues
                 console.warn('[Permission Denied] userId:', userId, 'required:', requiredPermission);

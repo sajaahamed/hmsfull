@@ -32,7 +32,7 @@ const CreateHostel = () => {
                 }
             })
             .catch(err => console.error(err));
-    }, []);
+    }, [token]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -104,7 +104,8 @@ const CreateHostel = () => {
                         onChange={handleInputChange}
                         options={[
                             { label: 'Male', value: 'Male' },
-                            { label: 'Female', value: 'Female' }
+                            { label: 'Female', value: 'Female' },
+                            { label: 'REV', value: 'REV' }
                         ]}
                         required
                     />

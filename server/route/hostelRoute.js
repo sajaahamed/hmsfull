@@ -15,9 +15,13 @@ router.get('/View-one-hostel/:id', authMiddleware, checkPermission('view-one-hos
 
 router.post('/update-room-count/:id', authMiddleware, checkPermission('update-room-count'), HostelController.updateRoomCount)
 
+router.post('/update-hostel-gender/:id', authMiddleware, checkPermission('update-room-count'), HostelController.updateHostelGender)
+
 router.post('/assign-new-warden', authMiddleware, checkPermission('assign-new-warden'), HostelController.assignNewWarden)
 
 router.post('/assign-students', authMiddleware, checkPermission('student-assign-hostel'), HostelController.assignStudents)
+
+router.delete('/delete-hostel/:id', authMiddleware, checkPermission('delete-hostel'), HostelController.deleteHostel)
 
 router.get('/warden-students', authMiddleware, checkPermission('get-warden-students'), HostelController.getWardenStudents);
 

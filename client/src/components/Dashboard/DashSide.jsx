@@ -12,23 +12,21 @@ const DashSide = ({ toggleSide }) => {
 
     const { username, roles } = getUserInfoFromToken() || {};
 
-    // Normalize role names
     const roleNames = useMemo(() => Array.isArray(roles)
         ? roles.map(r => (typeof r === 'string' ? r : r.name))
         : [typeof roles === 'string' ? roles : roles?.name], [roles]);
 
-    // Filter menu based on role
     const filteredMenu = dashsidedata.filter(item => {
         if (roleNames.includes('admin') || roleNames.includes('director')) {
             return ![3, 5, 7, 12, 13, 14].includes(item.id);
         }
         if (roleNames.includes('warden')) {
-            return ![2, 4, 6, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20].includes(item.id);
+            return ![2, 4, 6, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21].includes(item.id);
         }
         if (roleNames.includes('student')) {
-            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20].includes(item.id);
+            return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21].includes(item.id);
         }
-        return false; // All others get no menu
+        return false;
     });
 
     const profileItem = filteredMenu.find(item => item.id === 8);
@@ -38,12 +36,10 @@ const DashSide = ({ toggleSide }) => {
     useEffect(() => {
         const currentItem = dashsidedata.find(item => item.link === location.pathname);
         if (currentItem) {
-            // Check if current item is allowed for this user role
             const allowedIds = filteredMenu.map(item => item.id);
             if (roleNames.includes('warden') && !allowedIds.includes(currentItem.id)) {
-                // Warden trying to access forbidden menu -> logout
                 localStorage.clear();
-                navigate('/');  // Adjust your login path here
+                navigate('/');
                 return;
             }
             setActiveMenu(currentItem.id);
@@ -56,7 +52,6 @@ const DashSide = ({ toggleSide }) => {
                 if (allowedIds.includes(savedIdNum)) {
                     setActiveMenu(savedIdNum);
                 } else {
-                    // Saved menu id not allowed for current user role, logout
                     localStorage.clear();
                     navigate('/');
                 }
@@ -68,10 +63,18 @@ const DashSide = ({ toggleSide }) => {
 
     return (
         <aside
-            className="shadow-lg h-full p-4 pb-10 flex flex-col xl:rounded-r-3xl
-                overflow-y-auto scrollbar-modern transition-all duration-300"
-            style={{ background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)', color: '#fff', borderRight: '1px solid rgba(212,175,55,0.15)' }}
+            className="shadow-lg h-full p-4 pb-10 flex flex-col xl:rounded-r-3xl overflow-y-auto transition-all duration-300"
+            style={{
+                background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)',
+                color: '#fff',
+                borderRight: '1px solid rgba(212,175,55,0.15)',
+                scrollbarWidth: 'none',       /* Firefox */
+                msOverflowStyle: 'none',      /* IE/Edge */
+            }}
         >
+            {/* Hide scrollbar for WebKit (Chrome, Safari) */}
+            <style>{`aside::-webkit-scrollbar { display: none; }`}</style>
+
             <div className="relative mb-6 flex justify-center items-center">
                 <img src={uoplogo} alt="University of Peradeniya Logo" className="h-14 object-contain" />
                 {toggleSide && (
@@ -113,10 +116,7 @@ const DashSide = ({ toggleSide }) => {
                         to={link}
                         key={id}
                         className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors text-sm
-                            ${activeMenu === id
-                                ? 'text-white shadow-lg'
-                                : 'hover:text-white'
-                            }`}
+                            ${activeMenu === id ? 'text-white shadow-lg' : 'hover:text-white'}`}
                         style={activeMenu === id
                             ? { background: 'linear-gradient(90deg, #d4af37, #c59a3a)' }
                             : { color: 'rgba(255,255,255,0.75)', background: 'transparent' }
@@ -139,10 +139,7 @@ const DashSide = ({ toggleSide }) => {
                     <Link
                         to={profileItem.link}
                         className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors text-sm
-                            ${activeMenu === profileItem.id
-                                ? 'text-white shadow-lg'
-                                : 'hover:text-white'
-                            }`}
+                            ${activeMenu === profileItem.id ? 'text-white shadow-lg' : 'hover:text-white'}`}
                         style={activeMenu === profileItem.id
                             ? { background: 'linear-gradient(90deg, #d4af37, #c59a3a)' }
                             : { color: 'rgba(255,255,255,0.75)', background: 'transparent' }

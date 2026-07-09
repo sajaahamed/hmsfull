@@ -20,6 +20,14 @@ const SignIn = () => {
     const [showWardenGuideDropdown, setShowWardenGuideDropdown] = useState(false);
     const navigate = useNavigate();
 
+    // Auto-redirect if already logged in
+    React.useEffect(() => {
+        const token = localStorage.getItem('login');
+        if (token) {
+            navigate('/Dashboard/Home');
+        }
+    }, [navigate]);
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setSignInData((prev) => ({ ...prev, [name]: value }));
@@ -55,8 +63,9 @@ const SignIn = () => {
                 alert(res.data.Message);
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
-                navigate('/Dashboard/Home');
-                window.location.reload();
+                
+                // Use window.location.href to safely navigate and reload at the same time
+                window.location.href = '/Dashboard/Home';
             } else {
                 setError(res.data.Error || 'Sign-in failed');
             }
