@@ -340,17 +340,26 @@ const EligibilityController = {
         }
     },
     // ─── Excel Import List ───
-    // Save imported enrolment numbers (replaces any previous import)
+    // Save imported enrolment numbers (replaces or appends to previous import)
     saveExcelImportList: async (req, res) => {
         try {
-            const { enrolmentNumbers, label } = req.body;
+            const { enrolmentNumbers, label, append } = req.body;
             if (!enrolmentNumbers || !Array.isArray(enrolmentNumbers) || enrolmentNumbers.length === 0) {
                 return res.status(400).json({ Error: 'enrolmentNumbers array is required' });
             }
 
+            let finalEnrolmentNumbers = [...enrolmentNumbers];
+
+            if (append) {
+                const existing = await ExcelImportList.findOne().sort({ importedAt: -1 }).lean();
+                if (existing) {
+                    finalEnrolmentNumbers = [...new Set([...existing.enrolmentNumbers, ...enrolmentNumbers])];
+                }
+            }
+
             // Cross-check with eligible students to count eligibleCount
             const eligible = await Student.find({
-                enrolmentNo: { $in: enrolmentNumbers },
+                enrolmentNo: { $in: finalEnrolmentNumbers },
                 eligibilityStatus: { $in: ['Eligible', true] },
                 isAssign: false
             }).lean();
@@ -359,16 +368,16 @@ const EligibilityController = {
             await ExcelImportList.deleteMany({});
 
             const newList = await ExcelImportList.create({
-                enrolmentNumbers,
+                enrolmentNumbers: finalEnrolmentNumbers,
                 importedBy: req.user?._id || req.user?.id || null,
-                totalImported: enrolmentNumbers.length,
+                totalImported: finalEnrolmentNumbers.length,
                 eligibleCount: eligible.length,
-                label: label || '',
+                label: append ? `Appended to List` : (label || ''),
             });
 
             return res.json({
                 Status: 'Success',
-                Message: `Import saved. ${eligible.length} eligible students found from ${enrolmentNumbers.length} imported.`,
+                Message: `Import saved. ${eligible.length} eligible students found from ${finalEnrolmentNumbers.length} total imported.`,
                 data: newList
             });
         } catch (err) {

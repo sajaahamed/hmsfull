@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -9,6 +9,9 @@ const DEPARTMENT_MAP = {
     LLB: 'Law',
     GIS: 'Geographical Science',
     SW: 'Social Work',
+    Mg: 'Management',
+    MG: 'Management',
+    Mgt: 'Management',
 };
 
 const getMainDept = enrolNo => {
@@ -60,6 +63,37 @@ const defaultPaymentFilters = {
     batch: '',
     residentDateFrom: '',
     residentDateTo: ''
+};
+
+// ── Generic nested header-row layout engine ───────────────────────────
+// Takes a list of header rows, where each row is an array of
+// { label, colSpan?, rowSpan? } cells (spans default to 1), and a total
+// leaf-column count. Returns, per row, only the cells that actually need
+// to be rendered/added for that row (cells "occupied" by a rowSpan from
+// an earlier row are skipped), each annotated with its 0-based colIndex.
+// This single layout is shared by both the Excel export and the on-screen
+// preview table so the two stay in sync automatically.
+const layoutHeaderRows = (headerRows, totalCols) => {
+    const occupied = Array.from({ length: headerRows.length }, () => new Array(totalCols).fill(false));
+    const placed = headerRows.map(() => []);
+
+    headerRows.forEach((rowCells, r) => {
+        let c = 0;
+        rowCells.forEach(cellDef => {
+            while (c < totalCols && occupied[r][c]) c++;
+            const colSpan = cellDef.colSpan || 1;
+            const rowSpan = cellDef.rowSpan || 1;
+            for (let rr = r; rr < r + rowSpan && rr < occupied.length; rr++) {
+                for (let cc = c; cc < c + colSpan; cc++) {
+                    occupied[rr][cc] = true;
+                }
+            }
+            placed[r].push({ label: cellDef.label, colSpan, rowSpan, colIndex: c });
+            c += colSpan;
+        });
+    });
+
+    return placed;
 };
 
 const DepartmentTreeSelect = ({ options, value, onChange }) => {
@@ -169,9 +203,16 @@ const DepartmentTreeSelect = ({ options, value, onChange }) => {
 };
 
 // ── Shared styling helpers ────────────────────────────────────────────
-const applyStylesToWorksheet = (worksheet) => {
+// headerRowStart/headerRowEnd are 1-indexed worksheet row numbers marking
+// the (possibly multi-row) column header block, so this works whether a
+// report has a flat 1-row header, a 2-row grouped header, or a 3-row
+// nested header.
+const applyStylesToWorksheet = (worksheet, headerRowStart = 3, headerRowEnd = 4) => {
+    const isHallList = worksheet.name === 'Hall List';
+
     worksheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
+            // Apply borders to all cells
             cell.border = {
                 top: { style: 'thin' },
                 left: { style: 'thin' },
@@ -179,13 +220,31 @@ const applyStylesToWorksheet = (worksheet) => {
                 right: { style: 'thin' }
             };
 
+            if (isHallList) {
+                // For Hall List, we only automatically style the Total row here, 
+                // because headers (1-6) and table headers (8-9) are styled manually.
+                if (rowNumber === worksheet.rowCount) {
+                    cell.font = { name: 'Calibri', size: 11, bold: true };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+                } else if (rowNumber > 9) {
+                    // Data rows
+                    cell.font = { name: 'Calibri', size: 11 };
+                    if (typeof cell.value === 'number') {
+                        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+                    } else {
+                        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                    }
+                }
+                return;
+            }
+
             if (rowNumber === 1) {
                 cell.font = { name: 'Calibri', size: 14, bold: true };
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
                 return;
             }
 
-            if (rowNumber === 3 || rowNumber === 4) {
+            if (rowNumber >= headerRowStart && rowNumber <= headerRowEnd) {
                 cell.font = { name: 'Calibri', size: 11, bold: true };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
                 cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
@@ -199,7 +258,7 @@ const applyStylesToWorksheet = (worksheet) => {
                 cell.font = { name: 'Calibri', size: 11 };
             }
 
-            if (rowNumber > 4) {
+            if (rowNumber > headerRowEnd) {
                 if (typeof cell.value === 'number') {
                     cell.alignment = { vertical: 'middle', horizontal: 'right' };
                 } else {
@@ -213,6 +272,8 @@ const applyStylesToWorksheet = (worksheet) => {
 const Reports = () => {
     const [loadingReport, setLoadingReport] = useState(null);
     const [showPaymentFilterModal, setShowPaymentFilterModal] = useState(false);
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [previewData, setPreviewData] = useState(null);
     const [paymentFilterLoading, setPaymentFilterLoading] = useState(false);
     const [paymentFilters, setPaymentFilters] = useState(defaultPaymentFilters);
     const [paymentFilterOptions, setPaymentFilterOptions] = useState({
@@ -302,390 +363,371 @@ const Reports = () => {
         setPaymentFilters(prev => ({ ...prev, [field]: value }));
     };
 
-    const handlePaymentExportWithFilters = async () => {
-        const selectedHostel = paymentFilterOptions.hostels.find(h => h._id === paymentFilters.hostelId);
+    const handlePaymentPreviewWithFilters = async () => {
+        try {
+            setPaymentFilterLoading(true);
+            const selectedHostel = paymentFilterOptions.hostels.find(h => h._id === paymentFilters.hostelId);
 
-        const filters = {
-            departmentFilter: paymentFilters.departmentFilter,
-            hostelId: paymentFilters.hostelId,
-            batchYear: paymentFilters.batchYear,
-            batch: paymentFilters.batch,
-            residentDateFrom: paymentFilters.residentDateFrom,
-            residentDateTo: paymentFilters.residentDateTo,
-            selectedHostelName: selectedHostel?.name || '',
-        };
+            const filters = {
+                departmentFilter: paymentFilters.departmentFilter,
+                hostelId: paymentFilters.hostelId,
+                batchYear: paymentFilters.batchYear,
+                batch: paymentFilters.batch,
+                residentDateFrom: paymentFilters.residentDateFrom,
+                selectedHostelName: selectedHostel?.name || '',
+            };
 
-        setShowPaymentFilterModal(false);
-        await handleDownload('payments', () => generatePaymentReport(filters));
+            const url = import.meta.env.VITE_APP_API + '/admin/payments';
+            const params = { ...filters };
+
+            const res = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` },
+                params,
+            });
+            const payments = res.data.Result || res.data.result || [];
+
+            const deptCode = filters.departmentFilter ? filters.departmentFilter.replace('MAIN:', '') : '';
+            const deptFullName = deptCode ? (DEPARTMENT_MAP[deptCode] || deptCode) : 'ALL';
+
+            const headers = [
+                'UNIVERSITY OF PERADENIYA',
+                `FACULTY OF ${deptFullName.toUpperCase()}`,
+                `ACADEMIC YEAR - ${(filters.batchYear || 'ALL ACADEMIC YEARS').toUpperCase()}`,
+                `BATCH - ${(filters.batch || 'ALL STUDY YEARS').toUpperCase()}`,
+                `HALLS OF RESIDENCE - ${(selectedHostel?.name || 'ALL HALLS').toUpperCase()}`,
+                `DATE OF RESIDENCE - ${filters.residentDateFrom ? filters.residentDateFrom.replace(/-/g, '.') : 'ALL DATES'}`,
+            ];
+
+            const columns = ['No', 'Enrolment No', 'Name', 'Room No', 'Hall fee', 'Date'];
+            const rows = payments.map((p, idx) => [
+                idx + 1,
+                p.studentId?.enrolmentNo || '-',
+                p.studentId?.fullName || p.studentId?.name || '-',
+                p.roomNo || '-',
+                Number(p.amount) || 0,
+                formatDateYmd(p.paidDate) || '-'
+            ]);
+            const totalAmount = rows.reduce((sum, r) => sum + (Number(r[4]) || 0), 0);
+
+            setPreviewData({
+                reportId: 'payments', title: 'Hall List', headers, columns, rows,
+                totalRow: ['Grand Total', '', '', '', totalAmount, ''],
+                fileName: 'Hall_List',
+            });
+            setShowPaymentFilterModal(false);
+            setShowPreviewModal(true);
+        } catch (error) {
+            console.error("Failed to load preview", error);
+            alert("Failed to load preview.");
+        } finally {
+            setPaymentFilterLoading(false);
+        }
     };
 
-    // ── 1. Distribution Report ────────────────────────────────────────
-    const generateDistributionReport = async () => {
+    const handlePreviewHeaderEdit = (index, value) => {
+        setPreviewData(prev => {
+            const newHeaders = [...prev.headers];
+            newHeaders[index] = value;
+            return { ...prev, headers: newHeaders };
+        });
+    };
+
+    const handlePreviewCellEdit = (rowIdx, colIdx, value) => {
+        setPreviewData(prev => {
+            const newRows = prev.rows.map(r => [...r]);
+            newRows[rowIdx][colIdx] = value;
+            return { ...prev, rows: newRows };
+        });
+    };
+
+    const handlePreviewTotalEdit = (colIdx, value) => {
+        setPreviewData(prev => {
+            const newTotal = [...prev.totalRow];
+            newTotal[colIdx] = value;
+            return { ...prev, totalRow: newTotal };
+        });
+    };
+
+    // ── Column widths for the preview table ──────────────────────────
+    // Sized from the longest actual value in each column (header, rows,
+    // total row) so long names like hostel names get enough room and
+    // short numeric columns stay compact.
+    const columnWidths = useMemo(() => {
+        if (!previewData) return [];
+        return previewData.columns.map((col, i) => {
+            let maxLen = String(col ?? '').length;
+            previewData.rows.forEach(r => {
+                const len = String(r[i] ?? '').length;
+                if (len > maxLen) maxLen = len;
+            });
+            if (previewData.totalRow) {
+                const len = String(previewData.totalRow[i] ?? '').length;
+                if (len > maxLen) maxLen = len;
+            }
+            // ~8px per character plus cell padding, clamped to a sane range
+            return Math.min(Math.max(maxLen * 8 + 32, 70), 320);
+        });
+    }, [previewData]);
+
+    // ── Generic preview openers ──────────────────────────────────────
+    const prepareDistributionPreview = async () => {
         const students = await fetchStudents();
         const hostels = await fetchHostels();
         const assignedStudents = students.filter(s => s.hostelId || s.hostelName || s.isAssign);
-
         const maleHostels = hostels.filter(h => h.gender === 'Male').sort((a, b) => a.name.localeCompare(b.name));
         const femaleHostels = hostels.filter(h => h.gender === 'Female').sort((a, b) => a.name.localeCompare(b.name));
         const allHostelCols = [...maleHostels, ...femaleHostels];
-
         const groups = {};
         assignedStudents.forEach(std => {
             const deptCode = getMainDept(std.enrolmentNo);
             const department = DEPARTMENT_MAP[deptCode] || deptCode;
             let batch = 'N/A';
-            if (std.enrolmentNo) {
-                const parts = std.enrolmentNo.split('/');
-                if (parts.length >= 2) batch = `${parts[0]}/${parts[1]}`;
-            }
+            if (std.enrolmentNo) { const parts = std.enrolmentNo.split('/'); if (parts.length >= 2) batch = `${parts[0]}/${parts[1]}`; }
             const key = `${department}_${batch}`;
-            if (!groups[key]) {
-                groups[key] = { department, batch, hostelCounts: {} };
-                allHostelCols.forEach(h => groups[key].hostelCounts[h.name] = 0);
-            }
+            if (!groups[key]) { groups[key] = { department, batch, hostelCounts: {} }; allHostelCols.forEach(h => groups[key].hostelCounts[h.name] = 0); }
             let assignedHostelName = std.hostelName;
-            if (!assignedHostelName && std.hostelId) {
-                const h = hostels.find(x => x._id === std.hostelId);
-                if (h) assignedHostelName = h.name;
-            }
-            if (assignedHostelName && groups[key].hostelCounts[assignedHostelName] !== undefined) {
-                groups[key].hostelCounts[assignedHostelName]++;
-            }
+            if (!assignedHostelName && std.hostelId) { const h = hostels.find(x => x._id === std.hostelId); if (h) assignedHostelName = h.name; }
+            if (assignedHostelName && groups[key].hostelCounts[assignedHostelName] !== undefined) groups[key].hostelCounts[assignedHostelName]++;
         });
-
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Hall Wise Summery');
-
-        const row1 = ['Faculty', 'Batch'];
-        if (maleHostels.length > 0) { row1.push('Male Hostels'); for (let i = 1; i < maleHostels.length; i++) row1.push(''); }
-        if (femaleHostels.length > 0) { row1.push('Female Hostels'); for (let i = 1; i < femaleHostels.length; i++) row1.push(''); }
-        row1.push('Total');
-
-        const row2 = ['', ''];
-        maleHostels.forEach(h => row2.push(h.name));
-        femaleHostels.forEach(h => row2.push(h.name));
-        row2.push('');
-
-        worksheet.addRow([`Hall Wise Summery Report - Generated ${new Date().toLocaleDateString()}`]);
-        worksheet.addRow([]);
-        worksheet.addRow(row1);
-        worksheet.addRow(row2);
-
-        worksheet.mergeCells(1, 1, 1, row1.length);
-        worksheet.mergeCells(3, 1, 4, 1);
-        worksheet.mergeCells(3, 2, 4, 2);
-
-        let colIdx = 3;
-        if (maleHostels.length > 0) { worksheet.mergeCells(3, colIdx, 3, colIdx + maleHostels.length - 1); colIdx += maleHostels.length; }
-        if (femaleHostels.length > 0) { worksheet.mergeCells(3, colIdx, 3, colIdx + femaleHostels.length - 1); colIdx += femaleHostels.length; }
-        worksheet.mergeCells(3, colIdx, 4, colIdx);
-
-        Object.values(groups).sort((a, b) => a.department.localeCompare(b.department)).forEach(g => {
-            const row = [g.department, g.batch];
-            let total = 0;
+        const columns = ['Faculty', 'Batch', ...allHostelCols.map(h => h.name), 'Total'];
+        const rows = Object.values(groups).sort((a, b) => a.department.localeCompare(b.department)).map(g => {
+            const row = [g.department, g.batch]; let total = 0;
             allHostelCols.forEach(h => { const c = g.hostelCounts[h.name]; row.push(c); total += c; });
-            row.push(total);
-            worksheet.addRow(row);
+            row.push(total); return row;
         });
-
-        worksheet.getColumn(1).width = 25;
-        worksheet.getColumn(2).width = 12;
-        for (let i = 0; i < allHostelCols.length; i++) { worksheet.getColumn(i + 3).width = 15; }
-        worksheet.getColumn(allHostelCols.length + 3).width = 12;
-
-        applyStylesToWorksheet(worksheet);
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hall_Wise_Summery_Report.xlsx');
+        return { reportId: 'distribution', title: 'Hall Wise Summary', headers: [`Hall Wise Summary Report - Generated ${new Date().toLocaleDateString()}`], columns, rows, totalRow: null, fileName: 'Hall_Wise_Summery_Report' };
     };
 
-    // ── 2. Capacity Report ────────────────────────────────────────────
-    const generateCapacityReport = async () => {
+    const prepareCapacityPreview = async () => {
         const hostels = await fetchHostels();
-        const rows = [];
-        let grandRooms = 0, grandMale = 0, grandFemale = 0;
-
-        hostels.forEach(h => {
+        const rows = []; let grandRooms = 0, grandMale = 0, grandFemale = 0, grandRev = 0, grandTotal = 0;
+        hostels.forEach((h, index) => {
             const rooms = h.roomCount || 0;
-            const maleCap = h.gender === 'Male' ? rooms * 2 : 0;
-            const femaleCap = h.gender === 'Female' ? rooms * 2 : 0;
-            rows.push([h.name || 'Unnamed', rooms, maleCap, femaleCap, maleCap + femaleCap]);
-            grandRooms += rooms; grandMale += maleCap; grandFemale += femaleCap;
+            const cap = h.totalCapacity || 0;
+            const maleCap = h.gender === 'Male' ? cap : 0;
+            const femaleCap = h.gender === 'Female' ? cap : 0;
+            const revCap = (h.gender === 'REV' || h.gender === 'Rev') ? cap : 0;
+            const total = maleCap + femaleCap + revCap;
+            rows.push([index + 1, h.name || 'Unnamed', rooms, maleCap, femaleCap, revCap, total]);
+            grandRooms += rooms; grandMale += maleCap; grandFemale += femaleCap; grandRev += revCap; grandTotal += total;
         });
-
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Hostel Details & Capacity');
-
-        worksheet.addRow([`Hostel Details & Capacity Report - Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`]);
-        worksheet.addRow([]);
-        worksheet.addRow(['Hostel Name', 'No of Rooms', 'Capacity', '', '']);
-        worksheet.addRow(['', '', 'Male', 'Female', 'Total']);
-        rows.forEach(r => worksheet.addRow(r));
-        worksheet.addRow(['Grand Total', grandRooms, grandMale, grandFemale, grandMale + grandFemale]);
-
-        worksheet.mergeCells(1, 1, 1, 5);
-        worksheet.mergeCells(3, 1, 4, 1);
-        worksheet.mergeCells(3, 2, 4, 2);
-        worksheet.mergeCells(3, 3, 3, 5);
-        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 1);
-
-        worksheet.columns = [
-            { width: 25 }, { width: 15 }, { width: 12 }, { width: 12 }, { width: 12 }
-        ];
-
-        applyStylesToWorksheet(worksheet);
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hostel_Details_&_Capacity__Report.xlsx');
+        return {
+            reportId: 'capacity',
+            title: 'Hostel Details & Capacity',
+            headers: [`Hostel Details & Capacity Report - Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`],
+            columns: ['No', 'Hostel Name', 'No of Rooms', 'Male', 'Female', 'Rev', 'Total'],
+            // Groups the last 4 leaf columns under one spanning header.
+            // span === 1 entries are auto-filled with their own column name
+            // and rendered as a single cell spanning both header rows.
+            columnGroups: [
+                { span: 1 },
+                { span: 1 },
+                { span: 1 },
+                { label: 'No. Can Be Accommodated', span: 4 },
+            ],
+            rows,
+            totalRow: ['Grand Total', '', grandRooms, grandMale, grandFemale, grandRev, grandTotal],
+            fileName: 'Hostel_Details_Capacity_Report'
+        };
     };
 
-    // ── 3. Financial Report ───────────────────────────────────────────
-    const generateFinancialReport = async () => {
+    const prepareFinancialPreview = async () => {
         const students = await fetchStudents();
         const hostels = await fetchHostels();
         const assignedStudents = students.filter(s => s.hostelId || s.hostelName || s.isAssign);
-
         const deptsSet = new Set();
-        assignedStudents.forEach(std => {
-            const deptCode = getMainDept(std.enrolmentNo);
-            const department = DEPARTMENT_MAP[deptCode] || deptCode;
-            deptsSet.add(department);
-        });
+        assignedStudents.forEach(std => { const deptCode = getMainDept(std.enrolmentNo); deptsSet.add(DEPARTMENT_MAP[deptCode] || deptCode); });
         const departments = Array.from(deptsSet).sort();
 
         const groups = {};
-        hostels.forEach(h => {
-            groups[h.name] = { hostelName: h.name, deptCounts: {} };
-            departments.forEach(d => { groups[h.name].deptCounts[d] = { M: 0, F: 0 }; });
-        });
-
+        hostels.forEach(h => { groups[h.name] = { hostelName: h.name, deptCounts: {} }; departments.forEach(d => { groups[h.name].deptCounts[d] = { M: 0, F: 0 }; }); });
         assignedStudents.forEach(std => {
-            let assignedHostelName = std.hostelName;
-            if (!assignedHostelName && std.hostelId) {
-                const h = hostels.find(x => x._id === std.hostelId);
-                if (h) assignedHostelName = h.name;
-            }
-            if (!assignedHostelName || !groups[assignedHostelName]) return;
-            const deptCode = getMainDept(std.enrolmentNo);
-            const department = DEPARTMENT_MAP[deptCode] || deptCode;
+            let hn = std.hostelName; if (!hn && std.hostelId) { const h = hostels.find(x => x._id === std.hostelId); if (h) hn = h.name; }
+            if (!hn || !groups[hn]) return;
+            const dept = DEPARTMENT_MAP[getMainDept(std.enrolmentNo)] || getMainDept(std.enrolmentNo);
             const gender = std.sex === 'Male' ? 'M' : 'F';
-            if (groups[assignedHostelName].deptCounts[department]) {
-                groups[assignedHostelName].deptCounts[department][gender]++;
-            }
+            if (groups[hn].deptCounts[dept]) groups[hn].deptCounts[dept][gender]++;
         });
 
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Faculty Wise Hostel Summery');
+        // Leaf columns: No, Hostel Name, then M/F per department, then Total, Fee/Student
+        const columns = ['No', 'Hostel Name'];
+        departments.forEach(d => columns.push(`${d} (M)`, `${d} (F)`));
+        columns.push('Total', 'Fee/Student');
 
-        const row1 = ['Hostel Name'];
-        departments.forEach(d => { row1.push(d); row1.push(''); });
-        row1.push('Total Students', 'Fee/Student');
-
-        const row2 = [''];
-        departments.forEach(() => row2.push('M', 'F'));
-        row2.push('', '');
-
-        worksheet.addRow([`Faculty Wise Hostel Summery - Generated ${new Date().toLocaleDateString()}`]);
-        worksheet.addRow([]);
-        worksheet.addRow(row1);
-        worksheet.addRow(row2);
-
-        worksheet.mergeCells(1, 1, 1, row1.length);
-        worksheet.mergeCells(3, 1, 4, 1);
-        let colIdx = 2;
-        departments.forEach(() => {
-            worksheet.mergeCells(3, colIdx, 3, colIdx + 1);
-            colIdx += 2;
-        });
-        worksheet.mergeCells(3, colIdx, 4, colIdx);
-        worksheet.mergeCells(3, colIdx + 1, 4, colIdx + 1);
-
-        Object.values(groups).sort((a, b) => a.hostelName.localeCompare(b.hostelName)).forEach(g => {
-            const row = [g.hostelName];
+        const sortedGroups = Object.values(groups).sort((a, b) => a.hostelName.localeCompare(b.hostelName));
+        const rows = sortedGroups.map((g, index) => {
+            const row = [index + 1, g.hostelName];
             let total = 0;
             departments.forEach(d => {
-                const mCount = g.deptCounts[d].M;
-                const fCount = g.deptCounts[d].F;
-                row.push(mCount, fCount);
-                total += mCount + fCount;
+                row.push(g.deptCounts[d].M, g.deptCounts[d].F);
+                total += g.deptCounts[d].M + g.deptCounts[d].F;
             });
             row.push(total, '');
-            worksheet.addRow(row);
+            return row;
         });
 
-        worksheet.getColumn(1).width = 25;
-        let cIdx = 2;
-        departments.forEach(() => {
-            worksheet.getColumn(cIdx++).width = 8;
-            worksheet.getColumn(cIdx++).width = 8;
-        });
-        worksheet.getColumn(cIdx++).width = 15;
-        worksheet.getColumn(cIdx++).width = 15;
+        // 3-row nested header:
+        // Row 1: No | Hostel Name | "No. of Occupied" (spans every dept's M/F cols) | Total | Fee/Student
+        // Row 2:  (skipped for No/Hostel/Total/Fee via rowSpan)  | per-department label spanning M & F
+        // Row 3:  (skipped)                                      | M | F  for each department
+        const deptColCount = departments.length * 2;
+        const headerRows = deptColCount > 0
+            ? [
+                [
+                    { label: 'No', rowSpan: 3 },
+                    { label: 'Hostel Name', rowSpan: 3 },
+                    { label: 'No. of Occupied', colSpan: deptColCount },
+                    { label: 'Total', rowSpan: 3 },
+                    { label: 'Fee/Student', rowSpan: 3 },
+                ],
+                departments.map(d => ({ label: d, colSpan: 2 })),
+                departments.flatMap(() => [{ label: 'M' }, { label: 'F' }]),
+            ]
+            : null; // no departments found: fall back to a flat single-row header
 
-        applyStylesToWorksheet(worksheet);
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Faculty_Wise_Hostel_Summery_Report.xlsx');
+        return {
+            reportId: 'financial',
+            title: 'Faculty Wise Hostel Summary',
+            headers: [`Faculty Wise Hostel Summary - Generated ${new Date().toLocaleDateString()}`],
+            columns,
+            headerRows,
+            rows,
+            totalRow: null,
+            fileName: 'Faculty_Wise_Hostel_Summery_Report'
+        };
     };
 
-    // ── 4. Eligibility & Allocation Report ────────────────────────────
-    const generateEligibilityReport = async () => {
+    const prepareEligibilityPreview = async () => {
         const students = await fetchStudents();
         const groups = {};
-        let grandRegistered = 0, grandEligible = 0, grandMale = 0, grandFemale = 0, grandRev = 0, grandTotal = 0;
-
+        let gR = 0, gE = 0, gM = 0, gF = 0, gRev = 0, gT = 0;
         students.forEach(std => {
             const deptCode = getMainDept(std.enrolmentNo);
             const department = DEPARTMENT_MAP[deptCode] || deptCode || 'Unknown';
-
             let batchYear = 'Unknown';
-            if (std.enrolmentNo) {
-                const parts = std.enrolmentNo.split('/');
-                if (parts.length >= 2 && parts[1]) {
-                    batchYear = parts[1].length === 2 ? `20${parts[1]}` : parts[1];
-                }
-            }
-
-            let studyYear = '';
-            if (std.dateOfEnrolment) {
-                studyYear = String((new Date().getFullYear() - new Date(std.dateOfEnrolment).getFullYear()) + 1);
-            }
-
+            if (std.enrolmentNo) { const parts = std.enrolmentNo.split('/'); if (parts.length >= 2 && parts[1]) batchYear = parts[1].length === 2 ? `20${parts[1]}` : parts[1]; }
+            let studyYear = ''; if (std.dateOfEnrolment) studyYear = String((new Date().getFullYear() - new Date(std.dateOfEnrolment).getFullYear()) + 1);
             const studyYearLabel = studyYear ? `Year ${studyYear}` : 'Unknown';
-
             const key = `${department}_${batchYear}_${studyYear}`;
-            if (!groups[key]) {
-                groups[key] = { department, batchYear, studyYearLabel, registered: 0, eligible: 0, maleAssigned: 0, femaleAssigned: 0 };
-            }
-
+            if (!groups[key]) groups[key] = { department, batchYear, studyYearLabel, registered: 0, eligible: 0, maleAssigned: 0, femaleAssigned: 0 };
             groups[key].registered++;
-
             const isAssigned = !!(std.isAssign || std.hostelId || std.hostelName);
             const isEligible = isAssigned || std.eligibilityStatus === 'Eligible' || std.eligibilityStatus === true;
-
             if (isEligible) groups[key].eligible++;
-
-            if (isAssigned) {
-                const gender = (std.sex || '').toLowerCase();
-                if (gender === 'male') groups[key].maleAssigned++;
-                else if (gender === 'female') groups[key].femaleAssigned++;
-            }
+            if (isAssigned) { const g = (std.sex || '').toLowerCase(); if (g === 'male') groups[key].maleAssigned++; else if (g === 'female') groups[key].femaleAssigned++; }
         });
-
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('HOSTEL Facillity Allocation and Student Satisfaction');
-
-        worksheet.addRow(['HOSTEL Facillity Allocation and Student Satisfaction']);
-        worksheet.addRow([]);
-        worksheet.addRow(['Faculty', 'Batch Year', 'Year of Intake', 'Student Registered', 'No. of Students Eligible for Hostel', 'No. of Students Who Received Hostel', '', '', '']);
-        worksheet.addRow(['', '', '', '', '', 'Male', 'Female', 'Rev', 'Total']);
-
-        Object.values(groups).sort((a, b) => a.department.localeCompare(b.department)).forEach(g => {
-            const rev = 0;
-            const total = g.maleAssigned + g.femaleAssigned + rev;
-            worksheet.addRow([g.department, g.batchYear, g.studyYearLabel, g.registered, g.eligible, g.maleAssigned, g.femaleAssigned, rev, total]);
-
-            grandRegistered += g.registered;
-            grandEligible += g.eligible;
-            grandMale += g.maleAssigned;
-            grandFemale += g.femaleAssigned;
-            grandRev += rev;
-            grandTotal += total;
+        const rows = Object.values(groups).sort((a, b) => a.department.localeCompare(b.department)).map(g => {
+            const rev = 0; const total = g.maleAssigned + g.femaleAssigned + rev;
+            gR += g.registered; gE += g.eligible; gM += g.maleAssigned; gF += g.femaleAssigned; gRev += rev; gT += total;
+            return [g.department, g.batchYear, g.studyYearLabel, g.registered, g.eligible, g.maleAssigned, g.femaleAssigned, rev, total];
         });
-
-        worksheet.addRow(['Grand Total', '', '', grandRegistered, grandEligible, grandMale, grandFemale, grandRev, grandTotal]);
-
-        worksheet.mergeCells(1, 1, 1, 9);
-        worksheet.mergeCells(3, 1, 4, 1);
-        worksheet.mergeCells(3, 2, 4, 2);
-        worksheet.mergeCells(3, 3, 4, 3);
-        worksheet.mergeCells(3, 4, 4, 4);
-        worksheet.mergeCells(3, 5, 4, 5);
-        worksheet.mergeCells(3, 6, 3, 9);
-        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 3);
-
-        worksheet.columns = [
-            { width: 25 }, { width: 15 }, { width: 18 }, { width: 20 }, { width: 35 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }
-        ];
-
-        applyStylesToWorksheet(worksheet);
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'HOSTEL_Facillity_Allocation_and_Student_Satisfaction_Report.xlsx');
+        return { reportId: 'eligibility', title: 'Hostel Facility Allocation & Student Satisfaction', headers: ['HOSTEL Facility Allocation and Student Satisfaction'], columns: ['Faculty', 'Batch Year', 'Year of Intake', 'Registered', 'Eligible', 'Male', 'Female', 'Rev', 'Total'], rows, totalRow: ['Grand Total', '', '', gR, gE, gM, gF, gRev, gT], fileName: 'HOSTEL_Facillity_Allocation_Report' };
     };
 
-    // ── 5. Payment Report ────────────────────────────
-    const generatePaymentReport = async (filters = {}) => {
+    const openReportPreview = async (reportId) => {
+        if (reportId === 'payments') { openPaymentFilterModal(); return; }
+        try {
+            setLoadingReport(reportId);
+            let data;
+            if (reportId === 'distribution') data = await prepareDistributionPreview();
+            else if (reportId === 'capacity') data = await prepareCapacityPreview();
+            else if (reportId === 'financial') data = await prepareFinancialPreview();
+            else if (reportId === 'eligibility') data = await prepareEligibilityPreview();
+            else return;
+            setPreviewData(data);
+            setShowPreviewModal(true);
+        } catch (err) { console.error('Preview failed', err); alert('Failed to prepare report preview.'); }
+        finally { setLoadingReport(null); }
+    };
 
-        const url = import.meta.env.VITE_APP_API + '/admin/payments';
-        const params = {};
-        if (filters.departmentFilter) params.departmentFilter = filters.departmentFilter;
-        if (filters.hostelId) params.hostelId = filters.hostelId;
-        if (filters.batchYear) params.batchYear = filters.batchYear;
-        if (filters.batch) params.batch = filters.batch;
-        if (filters.residentDateFrom) params.residentDateFrom = filters.residentDateFrom;
-        if (filters.residentDateTo) params.residentDateTo = filters.residentDateTo;
-
-        const res = await axios.get(url, {
-            headers: { Authorization: `Bearer ${token}` },
-            params,
-        });
-        const payments = res.data.Result || res.data.result || [];
-
+    const exportGenericExcel = async (data) => {
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Hall List');
-
-        worksheet.addRow([`Hall List - Generated ${new Date().toLocaleDateString()}`]);
+        const worksheet = workbook.addWorksheet(data.title);
+        data.headers.forEach(line => worksheet.addRow([line]));
         worksheet.addRow([]);
 
-        const headers = ['No', 'Reg No', 'Enrollment No', 'Hostel', 'Room No', 'Hall Fee', 'Paid Date'];
-        worksheet.addRow(headers);
-        worksheet.addRow(['', '', '', '', '', '', '']); // Empty row 4 for shared styling compatibility
+        const colCount = data.columns.length;
+        const headerRowStart = worksheet.rowCount + 1;
+        let headerRowCount = 1;
 
-        let totalAmount = 0;
+        if (data.headerRows) {
+            // Generic nested header (e.g. 3-row: No/Hostel/Total/Fee spanning
+            // all rows, faculty group row, M/F leaf row)
+            const placedRows = layoutHeaderRows(data.headerRows, colCount);
 
-        payments.forEach((p, idx) => {
-            const dateStr = formatDateYmd(p.paidDate) || '-';
-            const amount = Number(p.amount) || 0;
-            totalAmount += amount;
+            placedRows.forEach(rowCells => {
+                const rowArr = new Array(colCount).fill('');
+                rowCells.forEach(cell => { rowArr[cell.colIndex] = cell.label; });
+                worksheet.addRow(rowArr);
+            });
 
-            worksheet.addRow([
-                idx + 1,
-                p.studentId?.no || '-',
-                p.studentId?.enrolmentNo || '-',
-                p.hostelName || '-',
-                p.roomNo || '-',
-                amount,
-                dateStr
-            ]);
-        });
+            placedRows.forEach((rowCells, rIdx) => {
+                rowCells.forEach(cell => {
+                    if (cell.colSpan > 1 || cell.rowSpan > 1) {
+                        const startRow = headerRowStart + rIdx;
+                        const endRow = startRow + cell.rowSpan - 1;
+                        const startCol = cell.colIndex + 1;
+                        const endCol = startCol + cell.colSpan - 1;
+                        worksheet.mergeCells(startRow, startCol, endRow, endCol);
+                    }
+                });
+            });
 
-        worksheet.addRow(['Grand Total', '', '', '', '', totalAmount, '']);
+            headerRowCount = placedRows.length;
+        } else if (data.columnGroups) {
+            const groupRow = [];
+            let li = 0;
+            data.columnGroups.forEach(g => {
+                groupRow.push(g.span === 1 ? (g.label || data.columns[li]) : g.label);
+                for (let i = 1; i < g.span; i++) groupRow.push('');
+                li += g.span;
+            });
+            worksheet.addRow(groupRow);
 
-        worksheet.mergeCells(1, 1, 1, 7); // Title
+            const subRow = [];
+            li = 0;
+            data.columnGroups.forEach(g => {
+                if (g.span === 1) {
+                    subRow.push('');
+                    li += 1;
+                } else {
+                    for (let i = 0; i < g.span; i++) {
+                        subRow.push(data.columns[li]);
+                        li += 1;
+                    }
+                }
+            });
+            worksheet.addRow(subRow);
 
-        // Merge the two header rows to look like one centered header block
-        for (let i = 1; i <= 7; i++) {
-            worksheet.mergeCells(3, i, 4, i);
+            const groupHeaderRowNum = worksheet.rowCount - 1;
+            const subHeaderRowNum = worksheet.rowCount;
+            let cIdx = 1;
+            data.columnGroups.forEach(g => {
+                if (g.span === 1) {
+                    worksheet.mergeCells(groupHeaderRowNum, cIdx, subHeaderRowNum, cIdx);
+                } else {
+                    worksheet.mergeCells(groupHeaderRowNum, cIdx, groupHeaderRowNum, cIdx + g.span - 1);
+                }
+                cIdx += g.span;
+            });
+
+            headerRowCount = 2;
+        } else {
+            worksheet.addRow(data.columns);
+            headerRowCount = 1;
         }
 
-        worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, 5); // Total label
+        const headerRowEnd = headerRowStart + headerRowCount - 1;
 
-        worksheet.columns = [
-            { width: 8 },
-            { width: 15 },
-            { width: 20 },
-            { width: 22 },
-            { width: 12 },
-            { width: 15 },
-            { width: 15 }
-        ];
-
-        applyStylesToWorksheet(worksheet);
-
+        data.rows.forEach(row => worksheet.addRow(row));
+        if (data.totalRow) worksheet.addRow(data.totalRow);
+        data.headers.forEach((_, i) => worksheet.mergeCells(i + 1, 1, i + 1, colCount));
+        data.columns.forEach((col, i) => { worksheet.getColumn(i + 1).width = Math.max(String(col).length + 4, 12); });
+        applyStylesToWorksheet(worksheet, headerRowStart, headerRowEnd);
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Hall_List.xlsx');
+        saveAs(new Blob([buffer]), `${data.fileName}.xlsx`);
     };
+
 
     const handleDownload = async (type, generatorFn) => {
         try {
@@ -705,200 +747,328 @@ const Reports = () => {
             title: 'Hall Wise Summery',
             description: 'Shows the distribution of students across hostels grouped by their academic department and batch year.',
             icon: Activity,
-            color: 'bg-blue-50 text-blue-600',
-            action: generateDistributionReport
+            color: 'bg-blue-50 text-blue-600'
         },
         {
             id: 'capacity',
             title: 'Hostel Details & Capacity',
             description: 'A comprehensive summary of room availability and overall accommodation capacity separated by gender.',
             icon: Building,
-            color: 'bg-emerald-50 text-emerald-600',
-            action: generateCapacityReport
+            color: 'bg-emerald-50 text-emerald-600'
         },
         {
             id: 'financial',
             title: 'Faculty Wise Hostel Summery',
             description: 'Breakdown of allocated students by department inside each hostel, intended for fee and academic analysis.',
             icon: IndianRupee,
-            color: 'bg-purple-50 text-purple-600',
-            action: generateFinancialReport
+            color: 'bg-purple-50 text-purple-600'
         },
         {
             id: 'eligibility',
             title: 'Hostel Facillity Allocation and Student Satisfaction',
             description: 'Detailed view of student registrations versus actual hostel eligibility and final room assignments.',
             icon: Users,
-            color: 'bg-amber-50 text-amber-600',
-            action: generateEligibilityReport
+            color: 'bg-amber-50 text-amber-600'
         },
         {
             id: 'payments',
             title: 'Hall List',
             description: 'Complete export of all recorded hostel hall fee payments made by assigned students.',
             icon: CreditCard,
-            color: 'bg-indigo-50 text-indigo-600',
-            action: generatePaymentReport
+            color: 'bg-indigo-50 text-indigo-600'
         }
     ];
 
     return (
-        <div className="p-8 max-w-7xl mx-auto min-h-screen">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">System Reports</h1>
-                <p className="text-gray-500">Generate and download comprehensive data exports for hostel management.</p>
-            </div>
+        <>
+            <div className={`p-8 max-w-7xl mx-auto min-h-screen ${showPreviewModal ? 'print:hidden' : ''}`}>
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-2">System Reports</h1>
+                    <p className="text-gray-500">Generate and download comprehensive data exports for hostel management.</p>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {reportOptions.map((report) => {
-                    const Icon = report.icon;
-                    const isLoading = loadingReport === report.id;
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {reportOptions.map((report) => {
+                        const Icon = report.icon;
+                        const isLoading = loadingReport === report.id;
 
-                    return (
-                        <div key={report.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col justify-between">
-                            <div>
-                                <div className="flex items-center gap-4 mb-4">
-                                    <div className={`p-3 rounded-xl ${report.color}`}>
-                                        <Icon className="w-6 h-6" />
+                        return (
+                            <div key={report.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className={`p-3 rounded-xl ${report.color}`}>
+                                            <Icon className="w-6 h-6" />
+                                        </div>
+                                        <h3 className="text-xl font-semibold text-gray-800">{report.title}</h3>
                                     </div>
-                                    <h3 className="text-xl font-semibold text-gray-800">{report.title}</h3>
+                                    <p className="text-gray-600 text-sm leading-relaxed mb-8">
+                                        {report.description}
+                                    </p>
                                 </div>
-                                <p className="text-gray-600 text-sm leading-relaxed mb-8">
-                                    {report.description}
-                                </p>
+
+                                <button
+                                    onClick={() => openReportPreview(report.id)}
+                                    disabled={!!loadingReport || paymentFilterLoading}
+                                    className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-all
+                                    ${isLoading
+                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                            : loadingReport || paymentFilterLoading
+                                                ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                                : 'bg-[#6b0f14] text-white hover:bg-[#4f0a0f] active:scale-[0.98]'
+                                        }
+                                `}
+                                >
+                                    {isLoading || (paymentFilterLoading && report.id === 'payments') ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                                            {paymentFilterLoading && report.id === 'payments' ? 'Loading filters...' : 'Generating...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FileSpreadsheet className="w-5 h-5" />
+                                            Preview Report
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {showPaymentFilterModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+                        <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-1">Hall List Filters</h2>
+                            <p className="text-sm text-gray-500 mb-6">Select filters for department, hostel, batch year, batch, and resident date.</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <DepartmentTreeSelect
+                                    options={paymentFilterOptions.departments}
+                                    value={paymentFilters.departmentFilter}
+                                    onChange={(val) => handlePaymentFilterChange('departmentFilter', val)}
+                                />
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Hostel</label>
+                                    <select
+                                        value={paymentFilters.hostelId}
+                                        onChange={(e) => handlePaymentFilterChange('hostelId', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    >
+                                        <option value="">All Hostels</option>
+                                        {paymentFilterOptions.hostels.map(h => (
+                                            <option key={h._id} value={h._id}>{h.name || 'Hostel'}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Batch Year</label>
+                                    <select
+                                        value={paymentFilters.batchYear}
+                                        onChange={(e) => handlePaymentFilterChange('batchYear', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    >
+                                        <option value="">All Batch Years</option>
+                                        {paymentFilterOptions.batchYears.map(year => (
+                                            <option key={year} value={year}>{year}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
+                                    <select
+                                        value={paymentFilters.batch}
+                                        onChange={(e) => handlePaymentFilterChange('batch', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    >
+                                        <option value="">All Batches</option>
+                                        {paymentFilterOptions.batches.map(batch => (
+                                            <option key={batch} value={batch}>{batch}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Resident Date</label>
+                                    <input
+                                        type="date"
+                                        value={paymentFilters.residentDateFrom}
+                                        onChange={(e) => handlePaymentFilterChange('residentDateFrom', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    />
+                                </div>
                             </div>
 
-                            <button
-                                onClick={() => {
-                                    if (report.id === 'payments') {
-                                        openPaymentFilterModal();
-                                        return;
-                                    }
-                                    handleDownload(report.id, report.action);
-                                }}
-                                disabled={!!loadingReport || paymentFilterLoading}
-                                className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-medium transition-all
-                                    ${isLoading
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : loadingReport || paymentFilterLoading
-                                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                                            : 'bg-[#6b0f14] text-white hover:bg-[#4f0a0f] active:scale-[0.98]'
-                                    }
-                                `}
-                            >
-                                {isLoading || (paymentFilterLoading && report.id === 'payments') ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                                        {paymentFilterLoading && report.id === 'payments' ? 'Loading filters...' : 'Generating...'}
-                                    </>
-                                ) : (
-                                    <>
-                                        <FileSpreadsheet className="w-5 h-5" />
-                                        Export to Excel
-                                    </>
-                                )}
-                            </button>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPaymentFilterModal(false)}
+                                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handlePaymentPreviewWithFilters}
+                                    className="rounded-lg bg-[#6b0f14] px-4 py-2 text-sm font-medium text-white hover:bg-[#4f0a0f]"
+                                >
+                                    Preview Report
+                                </button>
+                            </div>
                         </div>
-                    );
-                })}
+                    </div>
+                )}
             </div>
 
-            {showPaymentFilterModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-                    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-                        <h2 className="text-xl font-semibold text-gray-800 mb-1">Hall List Filters</h2>
-                        <p className="text-sm text-gray-500 mb-6">Select filters for department, hostel, batch year, batch, and resident date.</p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <DepartmentTreeSelect
-                                options={paymentFilterOptions.departments}
-                                value={paymentFilters.departmentFilter}
-                                onChange={(val) => handlePaymentFilterChange('departmentFilter', val)}
-                            />
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Hostel</label>
-                                <select
-                                    value={paymentFilters.hostelId}
-                                    onChange={(e) => handlePaymentFilterChange('hostelId', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                >
-                                    <option value="">All Hostels</option>
-                                    {paymentFilterOptions.hostels.map(h => (
-                                        <option key={h._id} value={h._id}>{h.name || 'Hostel'}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Batch Year</label>
-                                <select
-                                    value={paymentFilters.batchYear}
-                                    onChange={(e) => handlePaymentFilterChange('batchYear', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                >
-                                    <option value="">All Batch Years</option>
-                                    {paymentFilterOptions.batchYears.map(year => (
-                                        <option key={year} value={year}>{year}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
-                                <select
-                                    value={paymentFilters.batch}
-                                    onChange={(e) => handlePaymentFilterChange('batch', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                >
-                                    <option value="">All Batches</option>
-                                    {paymentFilterOptions.batches.map(batch => (
-                                        <option key={batch} value={batch}>{batch}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Resident Date From</label>
-                                <input
-                                    type="date"
-                                    value={paymentFilters.residentDateFrom}
-                                    onChange={(e) => handlePaymentFilterChange('residentDateFrom', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Resident Date To</label>
-                                <input
-                                    type="date"
-                                    value={paymentFilters.residentDateTo}
-                                    onChange={(e) => handlePaymentFilterChange('residentDateTo', e.target.value)}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                />
+            {showPreviewModal && previewData && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print-modal-overlay">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden print-modal-container">
+                        {/* Action Bar */}
+                        <div className="flex flex-wrap justify-between items-center p-6 border-b bg-gray-50 print-hide">
+                            <h2 className="text-xl font-bold text-gray-800">Preview: {previewData.title}</h2>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium">Close</button>
+                                {previewData.reportId === 'payments' && (
+                                    <button onClick={() => { setShowPreviewModal(false); setShowPaymentFilterModal(true); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium">Edit Filters</button>
+                                )}
+                                <button onClick={() => window.print()} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 font-medium">Export PDF</button>
+                                <button onClick={() => handleDownload(previewData.reportId, () => exportGenericExcel(previewData))} className="px-4 py-2 bg-[#6b0f14] text-white rounded-lg hover:bg-[#4f0a0f] font-medium">Export Excel</button>
                             </div>
                         </div>
 
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowPaymentFilterModal(false)}
-                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handlePaymentExportWithFilters}
-                                className="rounded-lg bg-[#6b0f14] px-4 py-2 text-sm font-medium text-white hover:bg-[#4f0a0f]"
-                            >
-                                Export Hall List
-                            </button>
+                        {/* Printable Content */}
+                        <div className="flex-1 overflow-auto p-8 bg-white print-report-area">
+                            <div className="mb-6 font-bold text-lg leading-snug">
+                                {previewData.headers.map((line, i) => (
+                                    <div key={i}>
+                                        <input
+                                            type="text"
+                                            value={line}
+                                            onChange={(e) => handlePreviewHeaderEdit(i, e.target.value)}
+                                            className="w-full outline-none bg-transparent font-bold text-lg"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-gray-400 text-sm table-fixed">
+                                    <colgroup>
+                                        {columnWidths.map((w, i) => (
+                                            <col key={i} style={{ width: `${w}px` }} />
+                                        ))}
+                                    </colgroup>
+                                    <thead>
+                                        {previewData.headerRows ? (
+                                            <>
+                                                {layoutHeaderRows(previewData.headerRows, previewData.columns.length).map((rowCells, rIdx) => (
+                                                    <tr key={rIdx}>
+                                                        {rowCells.map((cell, cIdx) => (
+                                                            <th
+                                                                key={cIdx}
+                                                                colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
+                                                                rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
+                                                                className={`border border-gray-400 p-2 font-bold break-words ${cell.colSpan > 1 ? 'text-center' : 'text-left'}`}
+                                                            >
+                                                                {cell.label}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </>
+                                        ) : previewData.columnGroups ? (
+                                            <>
+                                                <tr>
+                                                    {(() => {
+                                                        let li = 0;
+                                                        return previewData.columnGroups.map((g, i) => {
+                                                            const label = g.span === 1 ? (g.label || previewData.columns[li]) : g.label;
+                                                            const th = (
+                                                                <th
+                                                                    key={i}
+                                                                    colSpan={g.span > 1 ? g.span : undefined}
+                                                                    rowSpan={g.span === 1 ? 2 : undefined}
+                                                                    className={`border border-gray-400 p-2 font-bold break-words ${g.span > 1 ? 'text-center' : 'text-left'}`}
+                                                                >
+                                                                    {label}
+                                                                </th>
+                                                            );
+                                                            li += g.span;
+                                                            return th;
+                                                        });
+                                                    })()}
+                                                </tr>
+                                                <tr>
+                                                    {(() => {
+                                                        let li = 0;
+                                                        const ths = [];
+                                                        previewData.columnGroups.forEach((g, gi) => {
+                                                            if (g.span > 1) {
+                                                                for (let i = 0; i < g.span; i++) {
+                                                                    ths.push(
+                                                                        <th key={`${gi}-${i}`} className="border border-gray-400 p-2 font-bold text-left break-words">
+                                                                            {previewData.columns[li]}
+                                                                        </th>
+                                                                    );
+                                                                    li += 1;
+                                                                }
+                                                            } else {
+                                                                li += 1;
+                                                            }
+                                                        });
+                                                        return ths;
+                                                    })()}
+                                                </tr>
+                                            </>
+                                        ) : (
+                                            <tr>
+                                                {previewData.columns.map((col, i) => (
+                                                    <th key={i} className="border border-gray-400 p-2 font-bold text-left break-words">{col}</th>
+                                                ))}
+                                            </tr>
+                                        )}
+                                    </thead>
+                                    <tbody>
+                                        {previewData.rows.map((row, rIdx) => (
+                                            <tr key={rIdx}>
+                                                {row.map((cell, cIdx) => (
+                                                    <td key={cIdx} className="border border-gray-400 p-0">
+                                                        <input
+                                                            type="text"
+                                                            value={cell ?? ''}
+                                                            onChange={(e) => handlePreviewCellEdit(rIdx, cIdx, e.target.value)}
+                                                            title={String(cell ?? '')}
+                                                            className="w-full h-full p-2 outline-none bg-transparent"
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                        {previewData.totalRow && (
+                                            <tr className="font-bold bg-gray-50">
+                                                {previewData.totalRow.map((cell, cIdx) => (
+                                                    <td key={cIdx} className="border border-gray-400 p-0">
+                                                        <input
+                                                            type="text"
+                                                            value={cell ?? ''}
+                                                            onChange={(e) => handlePreviewTotalEdit(cIdx, e.target.value)}
+                                                            title={String(cell ?? '')}
+                                                            className="w-full h-full p-2 outline-none bg-transparent font-bold"
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 };
 

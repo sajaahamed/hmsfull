@@ -1,6 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import { FaMale, FaFemale, FaBed, FaUsers } from 'react-icons/fa';
+import { FaMale, FaFemale, FaBed, FaUsers, FaUser } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 
 const AllHostelData = () => {
@@ -26,6 +26,7 @@ const AllHostelData = () => {
         }
     };
     const femaleHostelCount = allhostels.filter(h => h.gender === 'Female').length;
+    const revHostelCount = allhostels.filter(h => h.gender === 'REV' || h.gender === 'Rev').length;
 
     const totalCapacity = allhostels.reduce((sum, h) => sum + (h.totalCapacity || 0), 0);
     const totalAssigned = allhostels.reduce((sum, h) => sum + (h.assignedStudents || 0), 0);
@@ -59,6 +60,13 @@ const AllHostelData = () => {
             bgColor: 'bg-[#d4af37]',
         },
         {
+            id: 5,
+            name: 'REV Hostels',
+            icon: FaUser,
+            value: revHostelCount,
+            bgColor: 'bg-[#7e57c2]',
+        },
+        {
             id: 3,
             name: 'Total Capacity',
             icon: FaBed,
@@ -82,7 +90,7 @@ const AllHostelData = () => {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
                 {hostelStats.map((stat) => (
                     <div key={stat.id} className={`relative ${stat.bgColor} text-white p-3 sm:p-4 rounded-xl shadow-md overflow-hidden hover:scale-[1.02] transition-transform duration-300`}>
                         {/* Icon in background */}
@@ -144,9 +152,13 @@ const AllHostelData = () => {
                                                 <span className="flex items-center gap-1 bg-[#fdf6e3] text-[#6b0f14] text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase">
                                                     <FaMale /> Male
                                                 </span>
-                                            ) : (
+                                            ) : data.gender === 'Female' ? (
                                                 <span className="flex items-center gap-1 bg-pink-100 text-pink-700 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase">
                                                     <FaFemale /> Female
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1 bg-purple-100 text-purple-700 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase">
+                                                    <FaUser /> {data.gender}
                                                 </span>
                                             )}
                                         </td>

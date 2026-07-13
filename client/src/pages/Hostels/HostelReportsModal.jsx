@@ -163,34 +163,39 @@ const HostelReportsModal = ({ isOpen, onClose, allHostels }) => {
     // ── 2. Capacity Report ────────────────────────────────────────────
     const generateCapacityReport = (hostels) => {
         const rows = [];
-        let grandRooms = 0, grandMale = 0, grandFemale = 0;
-        hostels.forEach(h => {
+        let grandRooms = 0, grandMale = 0, grandFemale = 0, grandRev = 0, grandTotal = 0;
+        hostels.forEach((h, index) => {
             const rooms = h.roomCount || 0;
-            const maleCap = h.gender === 'Male' ? rooms * 2 : 0;
-            const femaleCap = h.gender === 'Female' ? rooms * 2 : 0;
-            rows.push([h.name || 'Unnamed', rooms, maleCap, femaleCap, maleCap + femaleCap]);
-            grandRooms += rooms; grandMale += maleCap; grandFemale += femaleCap;
+            const cap = h.totalCapacity || 0;
+            const maleCap = h.gender === 'Male' ? cap : 0;
+            const femaleCap = h.gender === 'Female' ? cap : 0;
+            const revCap = (h.gender === 'REV' || h.gender === 'Rev') ? cap : 0;
+            const total = maleCap + femaleCap + revCap;
+            rows.push([index + 1, h.name || 'Unnamed', rooms, maleCap, femaleCap, revCap, total]);
+            grandRooms += rooms; grandMale += maleCap; grandFemale += femaleCap; grandRev += revCap; grandTotal += total;
         });
 
         const wsData = [
             [`Hostel Capacity Summary Report - Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`],
             [],
-            ['Hostel Name', 'No of Rooms', 'Capacity', '', ''],
-            ['', '', 'Male', 'Female', 'Total'],
+            ['No', 'Hostel Name', 'No of Rooms', 'Capacity', '', '', ''],
+            ['', '', '', 'Male', 'Female', 'Rev', 'Total'],
             ...rows,
-            ['Grand Total', grandRooms, grandMale, grandFemale, grandMale + grandFemale],
+            ['Grand Total', '', grandRooms, grandMale, grandFemale, grandRev, grandTotal],
         ];
 
         const merges = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },   // Title
-            { s: { r: 2, c: 0 }, e: { r: 3, c: 0 } },     // Hostel Name
-            { s: { r: 2, c: 1 }, e: { r: 3, c: 1 } },     // No of Rooms
-            { s: { r: 2, c: 2 }, e: { r: 2, c: 4 } },     // Capacity
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },   // Title
+            { s: { r: 2, c: 0 }, e: { r: 3, c: 0 } },     // No
+            { s: { r: 2, c: 1 }, e: { r: 3, c: 1 } },     // Hostel Name
+            { s: { r: 2, c: 2 }, e: { r: 3, c: 2 } },     // No of Rooms
+            { s: { r: 2, c: 3 }, e: { r: 2, c: 6 } },     // Capacity
+            { s: { r: wsData.length - 1, c: 0 }, e: { r: wsData.length - 1, c: 1 } }, // Grand Total
         ];
 
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         ws['!merges'] = merges;
-        ws['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+        ws['!cols'] = [{ wch: 5 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
 
         applyStyles(ws, wsData, new Set([2, 3]), 0, wsData.length - 1);
 

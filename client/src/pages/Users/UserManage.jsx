@@ -5,21 +5,18 @@ import { Link } from 'react-router-dom';
 
 const UserManage = () => {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
   const token = localStorage.getItem('login');
 
   const fetchUsers = () => {
-    setLoading(true);
     axios
       .get(import.meta.env.VITE_APP_API + '/user/view-all-users', {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => setUsers(res.data.Result || []))
       .catch((err) => setError(err.message || 'Failed to fetch users'))
-      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -28,7 +25,6 @@ const UserManage = () => {
 
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Delete this user? This will also remove any linked student data.')) return;
-    setLoading(true);
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_APP_API}/user/delete-user/${userId}`,
@@ -43,8 +39,6 @@ const UserManage = () => {
       }
     } catch (err) {
       setError(err.message || 'Error deleting user');
-    } finally {
-      setLoading(false);
     }
   };
 

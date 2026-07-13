@@ -24,7 +24,7 @@ const HostelAssign = () => {
         intakeYear: '',
         department: '',
     })
-    
+
     // Excel import filter from DB
     const [importedFilter, setImportedFilter] = useState(undefined) // undefined = loading, null = no list saved, array = filtered
     const [importInfo, setImportInfo] = useState(null)
@@ -366,27 +366,35 @@ const HostelAssign = () => {
     const handleSelectCountChange = (e) => {
         const val = e.target.value
         setSelectCount(val)
-        if (val !== 'Custom') setCustomSelect('')
-        const n = val === 'All' ? visibleStudents.length : Number(val) || 0
-        const ids = visibleStudents.slice(0, n).map(s => s._id)
-        setSelectedStudents(new Set(ids))
-        setSelectAllVisible(n >= visibleStudents.length && visibleStudents.length > 0)
+        setCustomSelect('')
+        setSelectedStudents(new Set())
+        setSelectAllVisible(false)
     }
 
     const handleCustomSelectChange = (e) => {
         const v = e.target.value.replace(/[^0-9]/g, '')
         setCustomSelect(v)
-        if (v) {
-            setSelectCount(v)
-            const n = Number(v)
-            const ids = visibleStudents.slice(0, n).map(s => s._id)
-            setSelectedStudents(new Set(ids))
-            setSelectAllVisible(n >= visibleStudents.length && visibleStudents.length > 0)
-        } else {
-            setSelectCount('All')
+
+        if (!v) {
             setSelectedStudents(new Set())
             setSelectAllVisible(false)
+            return
         }
+
+        let numToSelect = Number(v)
+        numToSelect = Math.min(numToSelect, visibleStudents.length)
+
+        let selectedArray = []
+        if (selectCount === 'Random') {
+            const shuffled = [...visibleStudents].sort(() => 0.5 - Math.random())
+            selectedArray = shuffled.slice(0, numToSelect)
+        } else {
+            selectedArray = visibleStudents.slice(0, numToSelect)
+        }
+
+        const ids = selectedArray.map(s => s._id)
+        setSelectedStudents(new Set(ids))
+        setSelectAllVisible(ids.length >= visibleStudents.length && visibleStudents.length > 0)
     }
 
     const handleHostelChange = (e) => {
@@ -436,7 +444,7 @@ const HostelAssign = () => {
                 } else {
                     alert('Students assigned successfully!')
                 }
-                
+
                 setSelectedStudents(new Set())
                 axios.get(import.meta.env.VITE_APP_API + '/eligibility/eligible-for-assignment', {
                     headers: { Authorization: `Bearer ${token}` }
@@ -575,15 +583,21 @@ const HostelAssign = () => {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
                     <label className="flex items-center gap-2">
                         <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-[#6b0f14] focus:ring-2 focus:ring-[#6b0f14]/30 transition" checked={selectAllVisible} onChange={handleSelectAllChange} />
-                        <span className="text-sm">Select All (visible)</span>
+                        <span className="text-sm">Select All </span>
                     </label>
 
                     <div className="flex items-center gap-2">
-                        <label className="text-sm">Select rows:</label>
-                        <select value={selectCount} onChange={handleSelectCountChange} className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 transition w-32 sm:w-auto">
+                        <label className="text-sm text-gray-600">Select rows:</label>
+                        <select value={selectCount} onChange={handleSelectCountChange} className="border px-2 py-1.5 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 transition w-24">
                             <option value="Custom">Custom</option>
+                            <option value="Random">Random</option>
                         </select>
-                        <input type="number" min="1" value={customSelect} onChange={handleCustomSelectChange} placeholder="Enter rows to select" className="border px-3 py-2 rounded-md w-full sm:w-40 focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 transition" />
+                        <input type="number" min="1" value={customSelect} onChange={handleCustomSelectChange} placeholder="Amount" className="border px-2 py-1.5 text-sm rounded-md w-20 focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 transition" />
+                        {selectCount === 'Random' && (
+                            <button onClick={() => handleCustomSelectChange({ target: { value: customSelect } })} className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 px-2 py-1.5 rounded-md text-sm font-medium transition">
+                                Reroll
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -627,8 +641,8 @@ const HostelAssign = () => {
                                         key={data._id}
                                         onClick={() => handleCheckboxChange(data._id)}
                                         className={`transition-all duration-150 cursor-pointer ${selectedStudents.has(data._id)
-                                                ? 'bg-[#fdf6e3] text-[#3a0709]'
-                                                : 'hover:bg-[#fefaf0]'
+                                            ? 'bg-[#fdf6e3] text-[#3a0709]'
+                                            : 'hover:bg-[#fefaf0]'
                                             }`}
                                     >
                                         <td className="px-3 sm:px-6 py-3">

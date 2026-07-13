@@ -45,7 +45,7 @@ const StdCreateSheet = () => {
         XLSX.writeFile(wb, "Student_Upload_Template.xlsx");
     };
 
-    const normalizeHeader = (h) => (h||'').toString().toLowerCase().replace(/\W/g,'');
+    const normalizeHeader = (h) => (h || '').toString().toLowerCase().replace(/\W/g, '');
 
     const validateRow = (rowObj, rowIndex) => {
         const errors = [];
@@ -54,7 +54,7 @@ const StdCreateSheet = () => {
         if (!String(get('enrolmentno') || get('enrollmentno')).trim()) errors.push({ row: rowIndex, col: 'Enrolment No', reason: 'missing' });
 
         const sex = String(get('sex')).trim().toLowerCase();
-        if (sex && !['m','male','f','female','rev','reverend'].includes(sex)) errors.push({ row: rowIndex, col: 'Sex', reason: `invalid value: "${get('sex')}". Accepted: M, Male, F, Female, REV, Reverend` });
+        if (sex && !['m', 'male', 'f', 'female', 'rev', 'reverend'].includes(sex)) errors.push({ row: rowIndex, col: 'Sex', reason: `invalid value: "${get('sex')}". Accepted: M, Male, F, Female, REV, Reverend` });
 
         const nic = String(get('nic')).trim();
         if (nic && !/^[A-Za-z0-9]{5,}$/i.test(nic)) errors.push({ row: rowIndex, col: 'NIC', reason: 'unexpected format' });
@@ -82,9 +82,9 @@ const StdCreateSheet = () => {
 
         if (!rows || rows.length === 0) return { ok: false, error: 'empty sheet' };
 
-        const rawHeaders = rows[0].map(h => h===null||h===undefined?'':String(h));
+        const rawHeaders = rows[0].map(h => h === null || h === undefined ? '' : String(h));
         const headerMap = {};
-        rawHeaders.forEach((h, i) => headerMap[ normalizeHeader(h) ] = i);
+        rawHeaders.forEach((h, i) => headerMap[normalizeHeader(h)] = i);
 
         const hasEnrolmentHeader = ('enrolmentno' in headerMap) || ('enrollmentno' in headerMap);
         if (!hasEnrolmentHeader) {
@@ -98,12 +98,12 @@ const StdCreateSheet = () => {
             for (const [norm, idx] of Object.entries(headerMap)) {
                 rowObj[norm] = row[idx];
             }
-            const errs = validateRow(rowObj, r+1);
+            const errs = validateRow(rowObj, r + 1);
             if (errs.length) rowErrors.push(...errs);
         }
 
         const badCols = [...new Set(rowErrors.map(e => e.col))];
-        return { ok: rowErrors.length === 0, rowErrors, badCols, totalRows: rows.length-1 };
+        return { ok: rowErrors.length === 0, rowErrors, badCols, totalRows: rows.length - 1 };
     };
 
     const headleUploadSheet = async () => {
@@ -281,7 +281,7 @@ const StdCreateSheet = () => {
                         <div className="mt-2 text-sm text-gray-700">
                             <div>Sample row errors (showing up to 10):</div>
                             <ul className="list-disc ml-5">
-                                {validation.rowErrors.slice(0,10).map((e, i) => (
+                                {validation.rowErrors.slice(0, 10).map((e, i) => (
                                     <li key={i}>Row {e.row} — {e.col}: {e.reason}</li>
                                 ))}
                             </ul>
@@ -306,8 +306,8 @@ const StdCreateSheet = () => {
                         <span>{progress.current} / {progress.total}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div 
-                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                        <div
+                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                             style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
                         ></div>
                     </div>
