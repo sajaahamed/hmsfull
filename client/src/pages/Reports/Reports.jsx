@@ -62,7 +62,9 @@ const defaultPaymentFilters = {
     batchYear: '',
     batch: '',
     residentDateFrom: '',
-    residentDateTo: ''
+    residentDateTo: '',
+    hallFee: '',
+    reportType: 'normal'
 };
 
 // ── Generic nested header-row layout engine ───────────────────────────
@@ -72,7 +74,11 @@ const defaultPaymentFilters = {
 // to be rendered/added for that row (cells "occupied" by a rowSpan from
 // an earlier row are skipped), each annotated with its 0-based colIndex.
 // This single layout is shared by both the Excel export and the on-screen
-// preview table so the two stay in sync automatically.
+// preview table so the two stay in sync automatically. Used by the
+// Hall Wise Summary report's 3-row nested header (Faculty/Batch/Total
+// spanning all rows, Male/Female group row, individual hostel leaf row)
+// and the Faculty Wise Hostel Summary report's 3-row nested header
+// (No/Hostel Name spanning all rows, per-faculty group row, M/F leaf row).
 const layoutHeaderRows = (headerRows, totalCols) => {
     const occupied = Array.from({ length: headerRows.length }, () => new Array(totalCols).fill(false));
     const placed = headerRows.map(() => []);
@@ -88,12 +94,37 @@ const layoutHeaderRows = (headerRows, totalCols) => {
                     occupied[rr][cc] = true;
                 }
             }
-            placed[r].push({ label: cellDef.label, colSpan, rowSpan, colIndex: c });
+            placed[r].push({ ...cellDef, colSpan, rowSpan, colIndex: c });
             c += colSpan;
         });
     });
 
     return placed;
+};
+
+// ── Shared column-width sizing ─────────────────────────────────────────
+// Returns the max character length seen in each column: checking the
+// header label, every data row, and the total row. Both the on-screen
+// preview (px widths) and the Excel export (character-unit widths) derive
+// their column widths from this, so narrow columns (e.g. single-letter
+// M/F) stay narrow instead of being forced to some large fixed minimum.
+const getColumnMaxLengths = (data) => {
+    const verticalIndices = data.verticalHeaderIndices || new Set();
+    return data.columns.map((col, i) => {
+        // Rotated (vertical) headers run top-to-bottom instead of
+        // left-to-right, so the label length shouldn't force the column
+        // wide — width for these columns comes only from the data/total values.
+        let maxLen = verticalIndices.has(i) ? 0 : String(col ?? '').length;
+        data.rows.forEach(r => {
+            const len = String(r[i] ?? '').length;
+            if (len > maxLen) maxLen = len;
+        });
+        if (data.totalRow) {
+            const len = String(data.totalRow[i] ?? '').length;
+            if (len > maxLen) maxLen = len;
+        }
+        return maxLen;
+    });
 };
 
 const DepartmentTreeSelect = ({ options, value, onChange }) => {
@@ -384,7 +415,11 @@ const Reports = () => {
                 headers: { Authorization: `Bearer ${token}` },
                 params,
             });
-            const payments = res.data.Result || res.data.result || [];
+            let payments = res.data.Result || res.data.result || [];
+
+            if (paymentFilters.reportType === 'certified') {
+                payments = payments.filter(p => p.roomNo && p.roomNo.trim() !== '' && p.roomNo !== '-');
+            }
 
             const deptCode = filters.departmentFilter ? filters.departmentFilter.replace('MAIN:', '') : '';
             const deptFullName = deptCode ? (DEPARTMENT_MAP[deptCode] || deptCode) : 'ALL';
@@ -395,7 +430,7 @@ const Reports = () => {
                 `ACADEMIC YEAR - ${(filters.batchYear || 'ALL ACADEMIC YEARS').toUpperCase()}`,
                 `BATCH - ${(filters.batch || 'ALL STUDY YEARS').toUpperCase()}`,
                 `HALLS OF RESIDENCE - ${(selectedHostel?.name || 'ALL HALLS').toUpperCase()}`,
-                `DATE OF RESIDENCE - ${filters.residentDateFrom ? filters.residentDateFrom.replace(/-/g, '.') : 'ALL DATES'}`,
+                `DATE OF RESIDENCE - ${filters.residentDateFrom ? filters.residentDateFrom.replace(/-/g, '.') : 'ALL DATES'}                                                                    Hall Fee Rs. ${filters.hallFee || '..........'}`,
             ];
 
             const columns = ['No', 'Enrolment No', 'Name', 'Room No', 'Hall fee', 'Date'];
@@ -407,12 +442,12 @@ const Reports = () => {
                 Number(p.amount) || 0,
                 formatDateYmd(p.paidDate) || '-'
             ]);
-            const totalAmount = rows.reduce((sum, r) => sum + (Number(r[4]) || 0), 0);
-
             setPreviewData({
-                reportId: 'payments', title: 'Hall List', headers, columns, rows,
-                totalRow: ['Grand Total', '', '', '', totalAmount, ''],
-                fileName: 'Hall_List',
+                reportId: 'payments',
+                reportType: paymentFilters.reportType,
+                title: paymentFilters.reportType === 'certified' ? 'Certified List' : 'Hall List',
+                headers, columns, rows,
+                fileName: paymentFilters.reportType === 'certified' ? 'Certified_List' : 'Hall_List',
             });
             setShowPaymentFilterModal(false);
             setShowPreviewModal(true);
@@ -454,18 +489,19 @@ const Reports = () => {
     // short numeric columns stay compact.
     const columnWidths = useMemo(() => {
         if (!previewData) return [];
-        return previewData.columns.map((col, i) => {
-            let maxLen = String(col ?? '').length;
-            previewData.rows.forEach(r => {
-                const len = String(r[i] ?? '').length;
-                if (len > maxLen) maxLen = len;
-            });
-            if (previewData.totalRow) {
-                const len = String(previewData.totalRow[i] ?? '').length;
-                if (len > maxLen) maxLen = len;
+        // ~7px per character plus modest padding, floored low (30px) so
+        // narrow columns like single-letter M/F headers stay compact,
+        // and capped at 260px so long text columns don't run away.
+        return getColumnMaxLengths(previewData).map((maxLen, i) => {
+            if (previewData.reportId === 'distribution') {
+                if (previewData.verticalHeaderIndices?.has(i)) {
+                    return 45; // Fixed narrow width for rotated headers to avoid excess spacing
+                }
+                if (i === 0) return Math.max(maxLen * 8 + 40, 100); // Faculty
+                if (i === 1) return Math.max(maxLen * 8 + 40, 120); // Batch
+                if (i === previewData.columns.length - 1) return Math.max(maxLen * 8 + 40, 100); // Total
             }
-            // ~8px per character plus cell padding, clamped to a sane range
-            return Math.min(Math.max(maxLen * 8 + 32, 70), 320);
+            return Math.min(Math.max(maxLen * 7 + 16, 30), 260);
         });
     }, [previewData]);
 
@@ -495,7 +531,49 @@ const Reports = () => {
             allHostelCols.forEach(h => { const c = g.hostelCounts[h.name]; row.push(c); total += c; });
             row.push(total); return row;
         });
-        return { reportId: 'distribution', title: 'Hall Wise Summary', headers: [`Hall Wise Summary Report - Generated ${new Date().toLocaleDateString()}`], columns, rows, totalRow: null, fileName: 'Hall_Wise_Summery_Report' };
+
+        // 3-row nested header:
+        // Row 1: Faculty | Batch | "Name of Halls" (spans every hostel column) | Total
+        // Row 2: (skipped for Faculty/Batch/Total via rowSpan) | "Male Hostels" (spans male cols) | "Female Hostels" (spans female cols)
+        // Row 3: (skipped) | individual hostel name per leaf column
+        const maleColCount = maleHostels.length;
+        const femaleColCount = femaleHostels.length;
+        const genderGroupRow = [];
+        if (maleColCount > 0) genderGroupRow.push({ label: 'Male Hostels', colSpan: maleColCount });
+        if (femaleColCount > 0) genderGroupRow.push({ label: 'Female Hostels', colSpan: femaleColCount });
+
+        // Hostel name leaf cells are rendered rotated 90° (vertical text) in
+        // both the preview and the Excel export, so they take up much less
+        // column width than the full hostel name would horizontally.
+        const headerRows = allHostelCols.length > 0
+            ? [
+                [
+                    { label: 'Faculty', rowSpan: 3 },
+                    { label: 'Batch', rowSpan: 3 },
+                    { label: 'Name of Halls', colSpan: allHostelCols.length },
+                    { label: 'Total', rowSpan: 3 },
+                ],
+                genderGroupRow,
+                allHostelCols.map(h => ({ label: h.name, vertical: true })),
+            ]
+            : null; // no hostels found: fall back to a flat single-row header
+
+        // Column indices (0-based, matching `columns` above) occupied by the
+        // rotated hostel-name headers: Faculty (0) and Batch (1) come first,
+        // then one column per hostel.
+        const verticalHeaderIndices = new Set(allHostelCols.map((_, idx) => idx + 2));
+
+        return {
+            reportId: 'distribution',
+            title: 'Hall Wise Summary',
+            headers: [`Hall Wise Summary Report - Generated ${new Date().toLocaleDateString()}`],
+            columns,
+            headerRows,
+            verticalHeaderIndices,
+            rows,
+            totalRow: null,
+            fileName: 'Hall_Wise_Summery_Report'
+        };
     };
 
     const prepareCapacityPreview = async () => {
@@ -650,9 +728,15 @@ const Reports = () => {
         const headerRowStart = worksheet.rowCount + 1;
         let headerRowCount = 1;
 
+        // Positions of rotated (vertical-text) header cells, collected below
+        // when headerRows are used, so their rotation can be (re-)applied
+        // after the generic style pass and their row can be made taller.
+        let verticalCellPositions = [];
+
         if (data.headerRows) {
-            // Generic nested header (e.g. 3-row: No/Hostel/Total/Fee spanning
-            // all rows, faculty group row, M/F leaf row)
+            // Generic nested header (e.g. 3-row: label spanning all rows,
+            // group row, leaf row) — used by the Hall Wise Summary and
+            // Faculty Wise Hostel Summary reports.
             const placedRows = layoutHeaderRows(data.headerRows, colCount);
 
             placedRows.forEach(rowCells => {
@@ -670,7 +754,22 @@ const Reports = () => {
                         const endCol = startCol + cell.colSpan - 1;
                         worksheet.mergeCells(startRow, startCol, endRow, endCol);
                     }
+                    if (cell.vertical) {
+                        verticalCellPositions.push({
+                            row: headerRowStart + rIdx,
+                            col: cell.colIndex + 1,
+                            labelLen: String(cell.label ?? '').length,
+                        });
+                    }
                 });
+            });
+
+            // Rotated text needs a taller row to fit — size it off the
+            // longest label rotated into that row (e.g. longest hostel name).
+            const rowsNeedingHeight = new Set(verticalCellPositions.map(v => v.row));
+            rowsNeedingHeight.forEach(rowNum => {
+                const maxLabelLen = Math.max(...verticalCellPositions.filter(v => v.row === rowNum).map(v => v.labelLen));
+                worksheet.getRow(rowNum).height = Math.min(Math.max(maxLabelLen * 5.5, 60), 150);
             });
 
             headerRowCount = placedRows.length;
@@ -721,9 +820,79 @@ const Reports = () => {
 
         data.rows.forEach(row => worksheet.addRow(row));
         if (data.totalRow) worksheet.addRow(data.totalRow);
+
+        if (data.reportId === 'payments') {
+            worksheet.addRow([]);
+            worksheet.addRow([]);
+
+            if (data.reportType === 'certified') {
+                worksheet.addRow(['I Certified that the above students are accomadated at ........................................................ Hall for the acadamic year']);
+                worksheet.addRow([]);
+                worksheet.addRow([]);
+
+                const signRow1 = new Array(colCount).fill('');
+                signRow1[0] = '...........................................';
+                signRow1[colCount - 1] = '.................';
+                worksheet.addRow(signRow1);
+
+                const signRow2 = new Array(colCount).fill('');
+                signRow2[0] = 'sub warden';
+                signRow2[colCount - 1] = 'Date';
+                worksheet.addRow(signRow2);
+
+                const lastRow = worksheet.rowCount;
+                for (let i = lastRow - 5; i <= lastRow; i++) {
+                    const r = worksheet.getRow(i);
+                    r.font = { name: 'Calibri', size: 11 };
+                    r.getCell(1).alignment = { horizontal: 'left' };
+                    r.getCell(colCount).alignment = { horizontal: 'right' };
+                }
+            } else {
+                worksheet.addRow(['Prepared By..........................']);
+                worksheet.addRow([]);
+                worksheet.addRow([]);
+                worksheet.addRow(['......................................................']);
+                worksheet.addRow(['DIRECTOR']);
+                worksheet.addRow(['STUDENT ACCOMMODATION DIVISION']);
+
+                const lastRow = worksheet.rowCount;
+                for (let i = lastRow - 5; i <= lastRow; i++) {
+                    const r = worksheet.getRow(i);
+                    r.font = { name: 'Calibri', size: 11 };
+                    r.getCell(1).alignment = { horizontal: 'left' };
+                }
+            }
+        }
+
         data.headers.forEach((_, i) => worksheet.mergeCells(i + 1, 1, i + 1, colCount));
-        data.columns.forEach((col, i) => { worksheet.getColumn(i + 1).width = Math.max(String(col).length + 4, 12); });
+        // Character-unit width from actual content (header/rows/total), floored
+        // low (4) so narrow columns like single-letter M/F stay narrow, capped
+        // at 30 so long text columns (e.g. hostel names) don't run away.
+        const maxLengths = getColumnMaxLengths(data);
+        data.columns.forEach((col, i) => {
+            if (data.reportId === 'distribution') {
+                if (data.verticalHeaderIndices?.has(i)) {
+                    worksheet.getColumn(i + 1).width = 4.5; // Tighter column width for Excel
+                } else if (i === 0) {
+                    worksheet.getColumn(i + 1).width = Math.max(maxLengths[i] + 5, 25); // Faculty
+                } else if (i === 1) {
+                    worksheet.getColumn(i + 1).width = Math.max(maxLengths[i] + 5, 15); // Batch
+                } else if (i === data.columns.length - 1) {
+                    worksheet.getColumn(i + 1).width = Math.max(maxLengths[i] + 5, 12); // Total
+                }
+            } else {
+                worksheet.getColumn(i + 1).width = Math.min(Math.max(maxLengths[i] + 2, 4), 30);
+            }
+        });
         applyStylesToWorksheet(worksheet, headerRowStart, headerRowEnd);
+
+        if (verticalCellPositions && verticalCellPositions.length > 0) {
+            verticalCellPositions.forEach(v => {
+                const cell = worksheet.getCell(v.row, v.col);
+                cell.alignment = { ...cell.alignment, textRotation: 90 };
+            });
+        }
+
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `${data.fileName}.xlsx`);
     };
@@ -842,6 +1011,18 @@ const Reports = () => {
                             <p className="text-sm text-gray-500 mb-6">Select filters for department, hostel, batch year, batch, and resident date.</p>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
+                                    <select
+                                        value={paymentFilters.reportType}
+                                        onChange={(e) => handlePaymentFilterChange('reportType', e.target.value)}
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    >
+                                        <option value="normal">Normal Report</option>
+                                        <option value="certified">Certified List</option>
+                                    </select>
+                                </div>
+
                                 <DepartmentTreeSelect
                                     options={paymentFilterOptions.departments}
                                     value={paymentFilters.departmentFilter}
@@ -899,6 +1080,17 @@ const Reports = () => {
                                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
                                     />
                                 </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Hall Fee (Rs.)</label>
+                                    <input
+                                        type="number"
+                                        value={paymentFilters.hallFee}
+                                        onChange={(e) => handlePaymentFilterChange('hallFee', e.target.value)}
+                                        placeholder="e.g. 5000"
+                                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                    />
+                                </div>
                             </div>
 
                             <div className="mt-6 flex justify-end gap-3">
@@ -924,6 +1116,15 @@ const Reports = () => {
 
             {showPreviewModal && previewData && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print-modal-overlay">
+                    <style>
+                        {`
+                            @media print {
+                                @page {
+                                    size: ${['payments', 'eligibility'].includes(previewData.reportId) ? 'portrait' : 'landscape'};
+                                }
+                            }
+                        `}
+                    </style>
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden print-modal-container">
                         {/* Action Bar */}
                         <div className="flex flex-wrap justify-between items-center p-6 border-b bg-gray-50 print-hide">
@@ -954,7 +1155,7 @@ const Reports = () => {
                             </div>
 
                             <div className="overflow-x-auto">
-                                <table className="w-full border-collapse border border-gray-400 text-sm table-fixed">
+                                <table className={`border-collapse border border-gray-400 text-sm table-fixed ${previewData.reportId === 'distribution' ? 'w-max' : 'w-full'}`}>
                                     <colgroup>
                                         {columnWidths.map((w, i) => (
                                             <col key={i} style={{ width: `${w}px` }} />
@@ -970,7 +1171,8 @@ const Reports = () => {
                                                                 key={cIdx}
                                                                 colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
                                                                 rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
-                                                                className={`border border-gray-400 p-2 font-bold break-words ${cell.colSpan > 1 ? 'text-center' : 'text-left'}`}
+                                                                className={`border border-gray-400 p-1 font-bold break-words ${cell.colSpan > 1 ? 'text-center' : 'text-left'} ${cell.vertical ? 'align-middle' : ''}`}
+                                                                style={cell.vertical ? { writingMode: 'vertical-rl', transform: 'rotate(180deg)' } : {}}
                                                             >
                                                                 {cell.label}
                                                             </th>
@@ -990,7 +1192,7 @@ const Reports = () => {
                                                                     key={i}
                                                                     colSpan={g.span > 1 ? g.span : undefined}
                                                                     rowSpan={g.span === 1 ? 2 : undefined}
-                                                                    className={`border border-gray-400 p-2 font-bold break-words ${g.span > 1 ? 'text-center' : 'text-left'}`}
+                                                                    className={`border border-gray-400 p-1 font-bold break-words ${g.span > 1 ? 'text-center' : 'text-left'}`}
                                                                 >
                                                                     {label}
                                                                 </th>
@@ -1008,7 +1210,7 @@ const Reports = () => {
                                                             if (g.span > 1) {
                                                                 for (let i = 0; i < g.span; i++) {
                                                                     ths.push(
-                                                                        <th key={`${gi}-${i}`} className="border border-gray-400 p-2 font-bold text-left break-words">
+                                                                        <th key={`${gi}-${i}`} className="border border-gray-400 p-1 font-bold text-left break-words">
                                                                             {previewData.columns[li]}
                                                                         </th>
                                                                     );
@@ -1025,7 +1227,7 @@ const Reports = () => {
                                         ) : (
                                             <tr>
                                                 {previewData.columns.map((col, i) => (
-                                                    <th key={i} className="border border-gray-400 p-2 font-bold text-left break-words">{col}</th>
+                                                    <th key={i} className="border border-gray-400 p-1 font-bold text-left break-words">{col}</th>
                                                 ))}
                                             </tr>
                                         )}
@@ -1040,7 +1242,7 @@ const Reports = () => {
                                                             value={cell ?? ''}
                                                             onChange={(e) => handlePreviewCellEdit(rIdx, cIdx, e.target.value)}
                                                             title={String(cell ?? '')}
-                                                            className="w-full h-full p-2 outline-none bg-transparent"
+                                                            className="w-full h-full p-1 outline-none bg-transparent"
                                                         />
                                                     </td>
                                                 ))}
@@ -1055,7 +1257,7 @@ const Reports = () => {
                                                             value={cell ?? ''}
                                                             onChange={(e) => handlePreviewTotalEdit(cIdx, e.target.value)}
                                                             title={String(cell ?? '')}
-                                                            className="w-full h-full p-2 outline-none bg-transparent font-bold"
+                                                            className="w-full h-full p-1 outline-none bg-transparent font-bold"
                                                         />
                                                     </td>
                                                 ))}
@@ -1064,6 +1266,33 @@ const Reports = () => {
                                     </tbody>
                                 </table>
                             </div>
+
+                            {previewData.reportId === 'payments' && previewData.reportType !== 'certified' && (
+                                <div className="mt-12 text-sm flex flex-col gap-10">
+                                    <div>Prepared By..........................</div>
+                                    <div>
+                                        ......................................................<br />
+                                        DIRECTOR<br />
+                                        STUDENT ACCOMMODATION DIVISION
+                                    </div>
+                                </div>
+                            )}
+
+                            {previewData.reportId === 'payments' && previewData.reportType === 'certified' && (
+                                <div className="mt-12 text-sm flex flex-col gap-10">
+                                    <div>I Certified that the above students are accomadated at ........................................................ Hall for the acadamic year</div>
+                                    <div className="flex justify-between mt-4 pr-12">
+                                        <div>
+                                            ............................<br />
+                                            sub warden
+                                        </div>
+                                        <div>
+                                            ..........<br />
+                                            Date
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

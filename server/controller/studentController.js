@@ -78,7 +78,7 @@ async function getRoadDistanceOSRM(start, end) {
 
         const response = await axios.get(osrmUrl);
         const distance = response.data.routes[0].legs[0].distance;
-        return distance / 1000; // km
+        return Math.ceil(distance / 1000); // km, rounded up
     } catch (error) {
         console.error('Error getting road distance from OSRM:', error.message);
         return null;
@@ -116,7 +116,7 @@ async function getDistanceWithGoogleDirections(origin, dest, apiKey) {
         }
 
         const minMeters = Math.min(...validDistances);
-        return minMeters / 1000; // meters -> km
+        return Math.ceil(minMeters / 1000); // meters -> km, rounded up
     } catch (err) {
         console.error('[getDistanceWithGoogleDirections] Exception:', err.message);
         return null;
@@ -134,7 +134,7 @@ async function getDistanceWithDistanceMatrix(origin, dest, apiKey) {
         }
         const el = resp.data.rows?.[0]?.elements?.[0];
         if (el && el.status === 'OK' && el.distance && typeof el.distance.value === 'number') {
-            return el.distance.value / 1000; // meters -> km
+            return Math.ceil(el.distance.value / 1000); // meters -> km, rounded up
         }
         console.warn('[getDistanceWithDistanceMatrix] element missing or not OK');
         return null;
@@ -167,11 +167,11 @@ async function getDistanceWithDistanceMatrix(origin, dest, apiKey) {
 async function getTransitDistanceMatrix(origin, dest, apiKey, arrivalUnix) {
     try {
         const params = new URLSearchParams({
-            origins:      origin,
+            origins: origin,
             destinations: dest,
-            key:          apiKey,
-            units:        'metric',
-            mode:         'transit',
+            key: apiKey,
+            units: 'metric',
+            mode: 'transit',
             transit_mode: 'bus',
             transit_routing_preference: 'fewer_transfers', // most direct route / optimistic
             arrival_time: String(Math.round(arrivalUnix)),
@@ -194,8 +194,8 @@ async function getTransitDistanceMatrix(origin, dest, apiKey, arrivalUnix) {
             return { distanceKm: null, durationSec: null, durationText: null, apiStatus: 'ELEMENT_NOT_OK' };
         }
 
-        const distanceKm  = el.distance && typeof el.distance.value === 'number'
-            ? +(el.distance.value / 1000).toFixed(2) : null;
+        const distanceKm = el.distance && typeof el.distance.value === 'number'
+            ? Math.ceil(el.distance.value / 1000) : null;
         const durationSec = el.duration && typeof el.duration.value === 'number'
             ? el.duration.value : null;
         const durationText = el.duration && el.duration.text ? el.duration.text : null;
@@ -298,7 +298,7 @@ async function calculateDistance(originAddress) {
             if (transitResult.apiStatus === 'OK' && transitResult.distanceKm !== null) {
                 console.log(`[calculateDistance] Transit DM OK: ${transitResult.distanceKm} km, travel time: ${transitResult.durationText}`);
                 return {
-                    distanceKm:  transitResult.distanceKm,
+                    distanceKm: transitResult.distanceKm,
                     durationSec: transitResult.durationSec,
                     durationText: transitResult.durationText,
                     source: 'transit-distance-matrix',
@@ -331,7 +331,7 @@ async function calculateDistance(originAddress) {
     try {
         console.log('[calculateDistance] Priority 3 — Nominatim + OSRM...');
         const studentCoords = await geocodeWithNominatim(originAddress);
-        const uniCoords     = await geocodeWithNominatim(universityAddress);
+        const uniCoords = await geocodeWithNominatim(universityAddress);
         if (studentCoords && uniCoords) {
             const dkm = await getRoadDistanceOSRM(studentCoords, uniCoords);
             if (dkm !== null) {
@@ -347,7 +347,7 @@ async function calculateDistance(originAddress) {
         try {
             console.log('[calculateDistance] Priority 4 — OpenCage + OSRM...');
             const studentCoords = await geocodeWithOpenCage(originAddress);
-            const uniCoords     = await geocodeWithOpenCage(universityAddress);
+            const uniCoords = await geocodeWithOpenCage(universityAddress);
             if (studentCoords && uniCoords) {
                 const dkm = await getRoadDistanceOSRM(studentCoords, uniCoords);
                 if (dkm !== null) {
@@ -468,10 +468,10 @@ const StudentController = {
                     const searchAddress = /sri\s*lanka/i.test(originAddress) ? originAddress : `${originAddress}, Sri Lanka`;
                     const distResult = await calculateDistance(searchAddress);
                     if (distResult.distanceKm !== null) {
-                        studentData.distance            = distResult.distanceKm;
-                        studentData.transitDurationSec  = distResult.durationSec  || null;
+                        studentData.distance = distResult.distanceKm;
+                        studentData.transitDurationSec = distResult.durationSec || null;
                         studentData.transitDurationText = distResult.durationText || null;
-                        studentData.distanceSource      = distResult.source       || null;
+                        studentData.distanceSource = distResult.source || null;
                     }
                     console.log(`[sheet] ${studentData.enrolmentNo || '?'} → ${distResult.distanceKm} km (${distResult.durationText || 'n/a'}) via ${distResult.source}`);
                     // small delay to avoid rate limits
@@ -543,8 +543,8 @@ const StudentController = {
 
     getUploadProgress: async (req, res) => {
         const { uploadId } = req.params;
-        const progress = global.uploadProgress && global.uploadProgress[uploadId] 
-            ? global.uploadProgress[uploadId] 
+        const progress = global.uploadProgress && global.uploadProgress[uploadId]
+            ? global.uploadProgress[uploadId]
             : { current: 0, total: 0 };
         return res.json({ Status: 'Success', progress });
     },
@@ -729,10 +729,10 @@ const StudentController = {
             }
 
             // Auto-calculate distance from address if not provided
-            let computedDistance    = distance;
-            let computedDurationSec  = null;
+            let computedDistance = distance;
+            let computedDurationSec = null;
             let computedDurationText = null;
-            let computedDistSource   = null;
+            let computedDistSource = null;
             if (!distance && (address3 || fullAddress || address1 || address2)) {
                 const originAddress = fullAddress
                     || [address1, address2, address3].filter(Boolean).join(', ')
@@ -741,10 +741,10 @@ const StudentController = {
                     ? originAddress
                     : `${originAddress}, Sri Lanka`;
                 const distResult = await calculateDistance(searchAddress);
-                computedDistance    = distResult.distanceKm;
-                computedDurationSec  = distResult.durationSec;
+                computedDistance = distResult.distanceKm;
+                computedDurationSec = distResult.durationSec;
                 computedDurationText = distResult.durationText;
-                computedDistSource   = distResult.source;
+                computedDistSource = distResult.source;
                 console.log(`[createStudentManually] ${enrolmentNo} → ${computedDistance} km (${computedDurationText || 'n/a'}) via ${computedDistSource}`);
             }
 
@@ -760,10 +760,10 @@ const StudentController = {
                 fullAddress,
                 intake,
                 dateOfEnrolment,
-                distance:            computedDistance,
-                transitDurationSec:  computedDurationSec,
+                distance: computedDistance,
+                transitDurationSec: computedDurationSec,
                 transitDurationText: computedDurationText,
-                distanceSource:      computedDistSource,
+                distanceSource: computedDistSource,
                 isAssign: false,
                 eligibilityStatus: 'Not Eligible'
             });
@@ -956,12 +956,12 @@ const StudentController = {
             } = req.body;
 
             // Only auto-calculate distance if it's 0 or empty
-            let computedDistance    = (distance && Number(distance) !== 0) ? Number(distance) : null;
-            let computedDurationSec  = null;
+            let computedDistance = (distance && Number(distance) !== 0) ? Number(distance) : null;
+            let computedDurationSec = null;
             let computedDurationText = null;
-            let computedDistSource   = null;
+            let computedDistSource = null;
             const hasAddress = address3 || fullAddress || address1 || address2;
-            
+
             if (!computedDistance && hasAddress) {
                 const originAddress = fullAddress
                     || [address1, address2, address3].filter(Boolean).join(', ')
@@ -971,10 +971,10 @@ const StudentController = {
                     : `${originAddress}, Sri Lanka`;
                 const distResult = await calculateDistance(searchAddress);
                 if (distResult.distanceKm !== null) {
-                    computedDistance    = distResult.distanceKm;
-                    computedDurationSec  = distResult.durationSec;
+                    computedDistance = distResult.distanceKm;
+                    computedDurationSec = distResult.durationSec;
                     computedDurationText = distResult.durationText;
-                    computedDistSource   = distResult.source;
+                    computedDistSource = distResult.source;
                     console.log(`[updateStudent] ${id} → ${computedDistance} km (${computedDurationText || 'n/a'}) via ${computedDistSource}`);
                 }
             } else if (computedDistance) {
@@ -1001,12 +1001,12 @@ const StudentController = {
                     fullAddress,
                     intake,
                     dateOfEnrolment,
-                    distance:            computedDistance,
-                    transitDurationSec:  computedDurationSec,
+                    distance: computedDistance,
+                    transitDurationSec: computedDurationSec,
                     transitDurationText: computedDurationText,
-                    distanceSource:      computedDistSource,
-                    lastEditedBy:        editorName,
-                    lastEditedAt:        new Date(),
+                    distanceSource: computedDistSource,
+                    lastEditedBy: editorName,
+                    lastEditedAt: new Date(),
                 },
                 { new: true }
             );
@@ -1158,10 +1158,14 @@ const StudentController = {
             }
 
             if (req.user?.id) {
-                const tokenUser = await User.findById(req.user.id).select('email');
+                const tokenUser = await User.findById(req.user.id).select('email username');
                 const normalizedTokenEmail = normalizeEmail(tokenUser?.email);
                 if (normalizedTokenEmail) {
                     emailsToTry.add(normalizedTokenEmail);
+                }
+                // For students, username IS the enrolmentNo — add it as a candidate
+                if (tokenUser?.username) {
+                    emailsToTry.add(tokenUser.username.trim());
                 }
             }
 

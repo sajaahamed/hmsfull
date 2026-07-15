@@ -15,14 +15,16 @@ const ExtraNeeds = () => {
     useEffect(() => {
         const fetchSpecialNeeds = async () => {
             const userInfo = getUserInfoFromToken();
-            if (!userInfo?.email) {
+            if (!userInfo) {
                 setError('User not logged in');
                 setLoading(false);
                 return;
             }
 
             try {
-                const identifier = localStorage.getItem('studentRegNo') || userInfo.email;
+                // For students, username IS the enrolmentNo; email is a synthetic placeholder.
+                // Prefer studentRegNo (if previously saved), then username, then email.
+                const identifier = localStorage.getItem('studentRegNo') || userInfo.username || userInfo.email;
 
                 const response = await axios.get(
                     `${import.meta.env.VITE_APP_API}/student/get-student-needs/${encodeURIComponent(identifier)}`,

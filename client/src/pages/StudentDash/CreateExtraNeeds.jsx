@@ -4,7 +4,7 @@ import DefaultBtn from '../../components/Buttons/DefaultBtn'
 import TextAreaInput from '../../components/Form/TextAreaInput'
 import { getUserInfoFromToken } from '../../utils/auth' 
 
-import { replace, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 const CreateExtraNeeds = () => {
     const navigate = useNavigate()
@@ -27,10 +27,11 @@ const CreateExtraNeeds = () => {
             return
         }
 
-        if (userInfo && userInfo.email) {
+        if (userInfo && (userInfo.username || userInfo.email)) {
+            // For students, username IS the enrolmentNo; email is a synthetic placeholder.
             setFormData((prev) => ({
                 ...prev,
-                regNo: userInfo.email,
+                regNo: userInfo.username || userInfo.email,
             }))
         }
     }, [])

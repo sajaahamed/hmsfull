@@ -72,6 +72,22 @@ const checkPermission = (requiredPermission) => {
                 }
             }
 
+            // Student self-service: allow student users to access their own needs and
+            // emergency contact endpoints even when the permission strings haven't been
+            // explicitly added to the student Role document.
+            const studentSelfPermissions = [
+                'get-student-needs',
+                'student-create-needs',
+                'create-emergency-contact',
+                'emergency-contact',
+            ];
+            if (studentSelfPermissions.includes(requiredPermission)) {
+                const roleNames = user.roles.map(r => r.name);
+                if (roleNames.includes('student')) {
+                    return next();
+                }
+            }
+
             if (!allPermissions.includes(requiredPermission)) {
                 // Debug logging to help identify permission issues
                 console.warn('[Permission Denied] userId:', userId, 'required:', requiredPermission);

@@ -146,6 +146,7 @@ const StdCreateSheet = () => {
                     setProgress(res.data.progress);
                 }
             } catch (err) {
+                console.log(err);
                 // ignore polling errors
             }
         }, 1000);

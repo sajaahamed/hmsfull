@@ -64,8 +64,9 @@ const SignIn = () => {
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
                 
-                // Use window.location.href to safely navigate and reload at the same time
-                window.location.href = '/Dashboard/Home';
+                // Use React Router's navigate for smooth client-side transition
+                // (window.location.href causes a full reload which can lose state)
+                navigate('/Dashboard/Home');
             } else {
                 setError(res.data.Error || 'Sign-in failed');
             }

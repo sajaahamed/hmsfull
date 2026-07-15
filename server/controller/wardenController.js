@@ -552,8 +552,8 @@ const WardenController = {
                 .populate('userId', 'username email active')
                 .populate('hostelId', 'name gender hostelID');
 
-                console.log('🛎️ getAllWardens called – returning', wardens.length, 'records');
-                return res.json({ Status: 'Success', Result: wardens });
+            console.log('🛎️ getAllWardens called – returning', wardens.length, 'records');
+            return res.json({ Status: 'Success', Result: wardens });
         } catch (err) {
             console.error('Error getting wardens:', err);
             return res.json({ Error: 'Failed to fetch wardens' });
@@ -841,7 +841,7 @@ const WardenController = {
             const allocs = await Allocation.find({ hostelID: { $in: hostelIds }, active: true })
                 .populate('roomId')
                 .populate('hostelID')
-                .populate('studentId', 'fullName enrolmentNo name nic no _id');
+                .populate('studentId', 'fullName enrolmentNo name nic no _id department batchYear studyYear');
 
             console.log('[getPayments] allocations found:', allocs.length);
 
@@ -866,10 +866,10 @@ const WardenController = {
 
             const promises = [];
             if (enrolmentNos.length > 0) {
-                promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id'));
+                promises.push(Student.find({ enrolmentNo: { $in: enrolmentNos } }).select('fullName enrolmentNo name nic no _id department batchYear studyYear'));
             }
             if (objectIdsFromRegNo.length > 0) {
-                promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id'));
+                promises.push(Student.find({ _id: { $in: objectIdsFromRegNo } }).select('fullName enrolmentNo name nic no _id department batchYear studyYear'));
             }
 
             const studentResults = await Promise.all(promises);

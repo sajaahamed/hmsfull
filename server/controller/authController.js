@@ -292,7 +292,7 @@ const authController = {
                 profileImage: checkuser.profileImage || ''
             };
 
-            const token = jwt.sign({ id: checkuser._id, role: checkuser.roles, user: safeUser }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            const token = jwt.sign({ id: checkuser._id, role: checkuser.roles, user: safeUser }, process.env.JWT_SECRET, { expiresIn: '10h' });
 
             if (token) {
                 return res.json({ Status: "Success", Message: "Login Success", Token: token })

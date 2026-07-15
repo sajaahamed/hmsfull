@@ -13,11 +13,16 @@ export function getUserInfoFromToken() {
         const email = decoded.email || decoded.user?.email || null;
         const roles = decoded.role || decoded.roles || decoded.user?.roles || [];
 
-        if (!username || !email || roles.length === 0) {
-            return null;
-        }
+        // NOTE: Removed strict check that required all of username, email, and roles
+        // to be present. Some users (e.g. students) may have partially missing data
+        // in their token, which was causing an immediate redirect back to login.
+        // if (!username || !email || roles.length === 0) {
+        //     return null;
+        // }
 
-        localStorage.setItem('loginE', email)
+        if (email) {
+            localStorage.setItem('loginE', email);
+        }
 
         return { username, email, roles };
     } catch (error) {
