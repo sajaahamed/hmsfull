@@ -18,7 +18,7 @@ const HostelData = () => {
                 setAllHostels(res.data.Result);
             })
             .catch(err => console.error("Failed to fetch hostels:", err));
-    }, []);
+    }, [token]);
 
     const hostalData = [
         {

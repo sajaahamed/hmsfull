@@ -17,7 +17,7 @@ const RolePermissions = () => {
         })
             .then(res => setgetroles(res.data.Result))
             .catch(err => console.log(err))
-    }, [])
+    }, [token])
 
     return (
         <div>

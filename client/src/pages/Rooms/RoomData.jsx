@@ -16,7 +16,7 @@ const RoomData = () => {
                 setroomdata(res.data.Result)
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [token])
     const stddata = [
         {
             id: 1,

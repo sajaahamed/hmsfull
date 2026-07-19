@@ -29,7 +29,7 @@ const EligibleStudents = () => {
 
     const token = localStorage.getItem('login')
 
-    const fetchStudents = () => {
+    const fetchStudents = React.useCallback(() => {
         const endpoint = activeTab === 'Not Eligible'
             ? '/eligibility/not-eligible'
             : '/eligibility/eligible-for-assignment'
@@ -40,11 +40,11 @@ const EligibleStudents = () => {
             setStudents(res.data.Result || [])
             setSelectedStudents(new Set())
         }).catch(err => console.error(err))
-    }
+    }, [token, activeTab])
 
     useEffect(() => {
         fetchStudents()
-    }, [token, activeTab])
+    }, [fetchStudents])
 
     const getMainDept = enrolNo => {
         if (!enrolNo) return ''
@@ -95,7 +95,7 @@ const EligibleStudents = () => {
                 out.set(k, arr)
             }
             return out
-        }, [students])
+        }, [])
 
         const displayLabelForValue = (val) => {
             if (!val) return ''

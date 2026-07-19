@@ -20,7 +20,7 @@ const ViewRoom = () => {
         })
             .then(res => setoneRoom(res.data.Result))
             .catch(err => console.log(err))
-    }, [])
+    }, [id, token])
 
     const [roomcapasity, setroomcapasity] = useState({
         roomID: id,

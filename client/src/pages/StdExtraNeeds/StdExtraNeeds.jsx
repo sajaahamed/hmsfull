@@ -35,7 +35,7 @@ const StdExtraNeeds = () => {
                 setGetExtraNeeds([])
                 setFilteredData([])
             })
-    }, [])
+    }, [token])
 
     useEffect(() => {
         const filtered = (getExtraNeeds || []).filter(item =>
@@ -101,6 +101,7 @@ const StdExtraNeeds = () => {
                             <th className="px-6 py-4 font-semibold">#</th>
                             <th className="px-6 py-4 font-semibold">Student Email</th>
                             <th className="px-6 py-4 font-semibold">Needs</th>
+                            <th className="px-6 py-4 font-semibold">Remark</th>
                             <th className="px-6 py-4 font-semibold">Status</th>
                             <th className="px-6 py-4 font-semibold">Action</th>
                         </tr>
@@ -118,6 +119,7 @@ const StdExtraNeeds = () => {
                                     {data.regNo?.email || "N/A"}
                                 </td>
                                 <td className="px-6 py-4">{data.needs}</td>
+                                <td className="px-6 py-4 text-gray-500 max-w-xs">{data.remark || "-"}</td>
                                 <td className="px-6 py-4">
                                     {decision === 'approved' && (
                                         <span className="flex items-center gap-1 bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-3 py-1 rounded-full uppercase">

@@ -25,7 +25,7 @@ const Profile = () => {
         })
             .then(res => setmydata(res.data.Result))
             .catch(err => console.log(err));
-    }, [token]);
+    }, [token, apiBase]);
 
     useEffect(() => {
         if (mydata?.profileImage) {

@@ -20,7 +20,7 @@ const StdData = () => {
                 setAllStds(res.data.Result)
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [token])
 
     const maleStudents = allstds.filter(std => std.sex === 'Male')
     const femaleStudents = allstds.filter(std => std.sex === 'Female')

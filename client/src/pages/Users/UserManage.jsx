@@ -10,18 +10,18 @@ const UserManage = () => {
 
   const token = localStorage.getItem('login');
 
-  const fetchUsers = () => {
+  const fetchUsers = React.useCallback(() => {
     axios
       .get(import.meta.env.VITE_APP_API + '/user/view-all-users', {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => setUsers(res.data.Result || []))
       .catch((err) => setError(err.message || 'Failed to fetch users'))
-  };
+  }, [token]);
 
   useEffect(() => {
     if (token) fetchUsers();
-  }, [token]);
+  }, [token, fetchUsers]);
 
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Delete this user? This will also remove any linked student data.')) return;

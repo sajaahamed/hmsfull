@@ -39,12 +39,12 @@ const AdminExtraNeeds = () => {
     }, [token])
 
     useEffect(() => {
-        const approvedOnly = (getExtraNeeds || []).filter(item => {
-            const decision = item?.decision || (item?.isAccpeted ? 'approved' : 'pending')
-            return decision === 'approved'
+        const specialCategories = ['Special need', 'Medical', 'Sports']
+        const extraNeedsOnly = (getExtraNeeds || []).filter(item => {
+            return !specialCategories.includes(item.needs)
         })
 
-        const filtered = approvedOnly.filter(item => {
+        const filtered = extraNeedsOnly.filter(item => {
             const searchLower = search.toLowerCase()
             
             if (searchField === 'email' && item.email) {
@@ -103,6 +103,7 @@ const AdminExtraNeeds = () => {
                             <th className="px-6 py-4 font-semibold">Hostel</th>
                             <th className="px-6 py-4 font-semibold">Room ID</th>
                             <th className="px-6 py-4 font-semibold">Extra Need</th>
+                            <th className="px-6 py-4 font-semibold">Remark</th>
                             <th className="px-6 py-4 font-semibold">Status</th>
                         </tr>
                     </thead>
@@ -132,15 +133,23 @@ const AdminExtraNeeds = () => {
                                         {data.needs}
                                     </span>
                                 </td>
+                                <td className="px-6 py-4 text-gray-500 max-w-xs">
+                                    {data.remark || "-"}
+                                </td>
                                 <td className="px-6 py-4">
                                     {decision === 'approved' && (
                                         <span className="flex items-center gap-1 bg-[#fdf6e3] text-[#6b0f14] text-xs font-semibold px-3 py-1 rounded-full uppercase">
                                             <FaRegCheckSquare className="h-4 w-auto" /> Approved
                                         </span>
                                     )}
-                                    {decision !== 'approved' && (
-                                        <span className="flex items-center gap-1 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full uppercase">
-                                            Hidden
+                                    {decision === 'rejected' && (
+                                        <span className="flex items-center gap-1 bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full uppercase">
+                                            Rejected
+                                        </span>
+                                    )}
+                                    {decision === 'pending' && (
+                                        <span className="flex items-center gap-1 bg-yellow-100 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full uppercase">
+                                            Pending
                                         </span>
                                     )}
                                 </td>

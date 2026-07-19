@@ -13,6 +13,8 @@ router.get('/payments', authMiddleware, checkPermission('view-payments'), AdminC
 router.get('/payments/export', authMiddleware, checkPermission('view-payments'), AdminController.exportPayments);
 // Admin: get all student extra needs with enrollment info, email, hostel, and room
 router.get('/student-extra-needs', authMiddleware, checkPermission('view-payments'), AdminController.getStudentExtraNeeds);
+// Admin: directly add a student to special needs, making them eligible and appending to excel queue
+router.post('/add-special-need', authMiddleware, AdminController.addSpecialNeed);
 
 // Admin: backup options
 router.get('/backup-settings', authMiddleware, checkPermission('manage-backups'), BackupSettingsController.getBackupSettings);

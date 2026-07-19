@@ -252,12 +252,16 @@ const applyStylesToWorksheet = (worksheet, headerRowStart = 3, headerRowEnd = 4)
             };
 
             if (isHallList) {
-                // For Hall List, we only automatically style the Total row here, 
-                // because headers (1-6) and table headers (8-9) are styled manually.
-                if (rowNumber === worksheet.rowCount) {
+                if (rowNumber >= headerRowStart && rowNumber <= headerRowEnd) {
+                    cell.font = { name: 'Calibri', size: 11, bold: true };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    return;
+                }
+                if (row.getCell(1).value === 'Grand Total') {
                     cell.font = { name: 'Calibri', size: 11, bold: true };
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-                } else if (rowNumber > 9) {
+                } else if (rowNumber > headerRowEnd) {
                     // Data rows
                     cell.font = { name: 'Calibri', size: 11 };
                     if (typeof cell.value === 'number') {
@@ -405,6 +409,7 @@ const Reports = () => {
                 batchYear: paymentFilters.batchYear,
                 batch: paymentFilters.batch,
                 residentDateFrom: paymentFilters.residentDateFrom,
+                hallFee: paymentFilters.hallFee,
                 selectedHostelName: selectedHostel?.name || '',
             };
 
@@ -433,6 +438,20 @@ const Reports = () => {
                 `DATE OF RESIDENCE - ${filters.residentDateFrom ? filters.residentDateFrom.replace(/-/g, '.') : 'ALL DATES'}                                                                    Hall Fee Rs. ${filters.hallFee || '..........'}`,
             ];
 
+            const headerRows = [
+                [
+                    { label: 'No', rowSpan: 2 },
+                    { label: 'Enrolment No', rowSpan: 2 },
+                    { label: 'Name', rowSpan: 2 },
+                    { label: 'Room No', rowSpan: 2 },
+                    { label: 'Payments', colSpan: 2 }
+                ],
+                [
+                    { label: 'Hall fee' },
+                    { label: 'Date' }
+                ]
+            ];
+
             const columns = ['No', 'Enrolment No', 'Name', 'Room No', 'Hall fee', 'Date'];
             const rows = payments.map((p, idx) => [
                 idx + 1,
@@ -442,11 +461,12 @@ const Reports = () => {
                 Number(p.amount) || 0,
                 formatDateYmd(p.paidDate) || '-'
             ]);
+
             setPreviewData({
                 reportId: 'payments',
                 reportType: paymentFilters.reportType,
                 title: paymentFilters.reportType === 'certified' ? 'Certified List' : 'Hall List',
-                headers, columns, rows,
+                headers, columns, headerRows, rows,
                 fileName: paymentFilters.reportType === 'certified' ? 'Certified_List' : 'Hall_List',
             });
             setShowPaymentFilterModal(false);
@@ -826,7 +846,7 @@ const Reports = () => {
             worksheet.addRow([]);
 
             if (data.reportType === 'certified') {
-                worksheet.addRow(['I Certified that the above students are accomadated at ........................................................ Hall for the acadamic year']);
+                worksheet.addRow(['I Certified that the above students are accomadated at ........................................................ Hall for the acadamic year.......................']);
                 worksheet.addRow([]);
                 worksheet.addRow([]);
 

@@ -39,9 +39,9 @@ const EmergencyContact = () => {
         } else {
             setLoading(false)
         }
-    }, [])
+    }, [fetchEmergencyContact])
 
-    const fetchEmergencyContact = async (regNo) => {
+    const fetchEmergencyContact = React.useCallback(async (regNo) => {
         try {
             const response = await axios.get(
                 `${import.meta.env.VITE_APP_API}/student/emergency-contact`,
@@ -69,7 +69,7 @@ const EmergencyContact = () => {
         } finally {
             setLoading(false)
         }
-    }
+    }, [token])
 
     const handleChange = (e) => {
         const { name, value } = e.target

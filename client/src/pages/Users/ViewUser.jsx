@@ -22,7 +22,7 @@ const ViewUser = () => {
                 setgetoneuser(res.data.Result);
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [id, token])
 
 
     const [getuserroles, setgetuserroles] = useState([])
@@ -37,7 +37,7 @@ const ViewUser = () => {
                 setgetuserroles(res.data.Result);
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [token])
 
     const headleVerifyuerEmail = async (userID) => {
         try {
@@ -88,9 +88,7 @@ const ViewUser = () => {
         roleID: '',
     })
 
-    const handleRoleChange = (e) => {
-        setupdateuserrole(prev => ({ ...prev, roleID: e.target.value }));
-    };
+
 
     const handleUpdateUserRole = async () => {
         try {

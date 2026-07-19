@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
 import DefaultInput from '../../components/Form/DefaultInput'
@@ -7,7 +7,6 @@ import DefaultBtn from '../../components/Buttons/DefaultBtn'
 
 const ViewOneRole = () => {
     const { id } = useParams()
-    const navigate = useNavigate()
     const token = localStorage.getItem('login')
     const [getonerole, setgetonerole] = useState({})
 
@@ -21,7 +20,7 @@ const ViewOneRole = () => {
                 setgetonerole(res.data.Result);
             })
             .catch(err => console.log(err))
-    }, [])
+    }, [id, token])
 
     const [detelepermission, setdetelepermission] = useState({
         roleId: id,

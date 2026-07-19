@@ -28,7 +28,7 @@ const AssignViaExcel = () => {
     const [manualMessage, setManualMessage] = useState(null)
     const [isManualAdding, setIsManualAdding] = useState(false)
 
-    const fetchSavedList = async () => {
+    const fetchSavedList = React.useCallback(async () => {
         try {
             const res = await axios.get(import.meta.env.VITE_APP_API + '/eligibility/get-excel-import', {
                 headers: { Authorization: `Bearer ${token}` }
@@ -37,7 +37,7 @@ const AssignViaExcel = () => {
         } catch (err) {
             console.error('Failed to fetch saved import list:', err)
         }
-    }
+    }, [token])
 
     useEffect(() => {
         // Load eligible students for cross-check preview
@@ -53,7 +53,7 @@ const AssignViaExcel = () => {
             .catch(err => console.error(err))
 
         fetchSavedList()
-    }, [token])
+    }, [token, fetchSavedList])
 
     const validateEnrolment = (eNo) => {
         if (!eNo) return { status: 'empty', reason: '' }

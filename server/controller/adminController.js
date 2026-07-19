@@ -365,14 +365,7 @@ const AdminController = {
     // Admin: Get all student extra needs with enrollment info, email, hostel, and room
     getStudentExtraNeeds: async (req, res) => {
         try {
-            // Fetch only approved special-needs records.
-            // Backwards compatibility: older records may not have `decision` but will have `isAccpeted:true` when approved.
-            const specialNeeds = await SpecialNeeds.find({
-                $or: [
-                    { decision: 'approved' },
-                    { isAccpeted: true }
-                ]
-            })
+            const specialNeeds = await SpecialNeeds.find({})
                 .populate('regNo', 'enrolmentNo email fullName _id')
                 .sort({ createdAt: -1 });
 
@@ -424,6 +417,7 @@ const AdminController = {
                     email: sn.regNo?.email || null,
                     fullName: sn.regNo?.fullName || null,
                     needs: sn.needs,
+                    remark: sn.remark || null,
                     isAccpeted: sn.isAccpeted,
                     decision: sn.decision || (sn.isAccpeted ? 'approved' : 'pending'),
                     hostelName: allocInfo?.hostelName || null,
@@ -439,6 +433,79 @@ const AdminController = {
         } catch (err) {
             console.error('admin getStudentExtraNeeds error:', err);
             return res.status(500).json({ Status: 'Fail', Error: 'Server error', details: err.message });
+        }
+    },
+
+    // Admin: directly add a student to special needs, making them eligible and appending to excel queue
+    addSpecialNeed: async (req, res) => {
+        try {
+            const { enrolmentNo, category, remark } = req.body;
+            if (!enrolmentNo || !category) {
+                return res.status(400).json({ Error: 'enrolmentNo and category are required' });
+            }
+
+            const Student = require('../model/Student');
+            const SpecialNeeds = require('../model/SpecialNeeds');
+            const ExcelImportList = require('../model/ExcelImportList');
+
+            // 1. Find the student
+            const student = await Student.findOne({ 
+                $or: [
+                    { enrolmentNo: enrolmentNo },
+                    { enrolmentNo: enrolmentNo.toUpperCase() }
+                ]
+            });
+
+            if (!student) {
+                return res.status(404).json({ Error: 'Student not found with this Enrollment No' });
+            }
+
+            // 2. Create the Special Needs record
+            const newNeed = await SpecialNeeds.create({
+                regNo: student._id,
+                needs: category,
+                remark: remark || '',
+                isAccpeted: true,
+                decision: 'approved'
+            });
+
+            // 3. Mark student as eligible
+            student.eligibilityStatus = 'Eligible';
+            student.isAssign = false;
+            await student.save();
+
+            // 4. Append to Excel Import List
+            const existingList = await ExcelImportList.findOne().sort({ importedAt: -1 }).lean();
+            let finalEnrolmentNumbers = [student.enrolmentNo];
+            
+            if (existingList && existingList.enrolmentNumbers) {
+                finalEnrolmentNumbers = [...new Set([...existingList.enrolmentNumbers, student.enrolmentNo])];
+            }
+
+            // Cross-check with eligible students to update eligibleCount accurately
+            const eligible = await Student.find({
+                enrolmentNo: { $in: finalEnrolmentNumbers },
+                eligibilityStatus: { $in: ['Eligible', true] },
+                isAssign: false
+            }).lean();
+
+            await ExcelImportList.deleteMany({});
+            await ExcelImportList.create({
+                enrolmentNumbers: finalEnrolmentNumbers,
+                importedBy: req.user?._id || req.user?.id || null,
+                totalImported: finalEnrolmentNumbers.length,
+                eligibleCount: eligible.length,
+                label: 'Appended Special Need Student',
+            });
+
+            return res.json({
+                Status: 'Success',
+                Message: 'Student added to Special Needs, marked eligible, and added to assignment queue successfully.'
+            });
+
+        } catch (err) {
+            console.error('admin addSpecialNeed error:', err);
+            return res.status(500).json({ Error: 'Server error', details: err.message });
         }
     }
 };
