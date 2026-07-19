@@ -37,9 +37,6 @@ const PrivateRoute = ({ element, allowedRoles }) => {
     return element;
 };
 
-export const logout = () => {
-    localStorage.clear();
-    window.location.reload()
-};
+
 
 export default PrivateRoute;

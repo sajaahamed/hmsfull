@@ -22,9 +22,15 @@ router.get('/assigned-students', authMiddleware, EligibilityController.getAssign
 // Unassign students
 router.post('/unassign-students', authMiddleware, EligibilityController.unassignStudents);
 
+// Change Hostel
+router.post('/change-hostel', authMiddleware, EligibilityController.changeHostel);
+
 // Excel Import List
 router.post('/save-excel-import', authMiddleware, EligibilityController.saveExcelImportList);
 router.get('/get-excel-import', authMiddleware, EligibilityController.getExcelImportList);
 router.delete('/clear-excel-import', authMiddleware, EligibilityController.clearExcelImportList);
+
+// Student Allocation History
+router.get('/allocation-history/:studentId', authMiddleware, EligibilityController.getStudentAllocationHistory);
 
 module.exports = router;

@@ -201,7 +201,7 @@ const EligibilityController = {
     // Unassign selected students from hostels
     unassignStudents: async (req, res) => {
         try {
-            const { allocationIds } = req.body;
+            const { allocationIds, note, changeDate } = req.body;
             if (!allocationIds || !Array.isArray(allocationIds) || allocationIds.length === 0) {
                 return res.status(400).json({ Error: 'allocationIds array is required' });
             }
@@ -270,9 +270,12 @@ const EligibilityController = {
 
             // 3. Deactivate ALL found allocations
             if (actualAllocationIds.length > 0) {
+                const outDateVal = changeDate ? new Date(changeDate) : new Date();
+                const noteVal = note || "Unassigned by Admin";
+
                 await Allocation.updateMany(
                     { _id: { $in: actualAllocationIds } },
-                    { $set: { active: false, outDate: new Date() } }
+                    { $set: { active: false, outDate: outDateVal, note: noteVal } }
                 );
 
                 // 4. Also remove them from their assigned Rooms
@@ -306,6 +309,37 @@ const EligibilityController = {
                 }
             }
 
+            const HostelAllocationHistory = require('../model/HostelAllocationHistory');
+            const historyDocs = [];
+            
+            const missingStudentIds = allTargetAllocations.filter(a => !a.studentId && a.regNo).map(a => a.regNo);
+            let legacyStudentsMap = new Map();
+            if(missingStudentIds.length) {
+                const ls = await Student.find({ enrolmentNo: { $in: missingStudentIds }});
+                ls.forEach(s => legacyStudentsMap.set(s.enrolmentNo, s._id));
+            }
+
+            allTargetAllocations.forEach(alloc => {
+                const sId = alloc.studentId || legacyStudentsMap.get(alloc.regNo) || (objectIdPattern.test(String(alloc.regNo)) ? alloc.regNo : null);
+                if (sId) {
+                    historyDocs.push({
+                        studentId: sId,
+                        previousHostelId: alloc.hostelID,
+                        previousRoomId: alloc.roomId,
+                        newHostelId: null,
+                        newRoomId: null,
+                        actionType: 'UNASSIGN_HOSTEL',
+                        actionDate: outDateVal,
+                        remark: noteVal,
+                        changedBy: req.user?.id || req.user?._id
+                    });
+                }
+            });
+
+            if(historyDocs.length > 0) {
+                await HostelAllocationHistory.insertMany(historyDocs);
+            }
+
             // 5. Update the students' status back to Eligible
             const enrolmentNos = new Set();
             regNoStrings.forEach(r => {
@@ -336,6 +370,160 @@ const EligibilityController = {
             });
         } catch (err) {
             console.error('Error in unassignStudents:', err);
+            return res.status(500).json({ Error: 'Internal server error' });
+        }
+    },
+
+    // Change students' hostel
+    changeHostel: async (req, res) => {
+        try {
+            const { allocationIds, newHostelId, note, changeDate } = req.body;
+            if (!allocationIds || !newHostelId) {
+                return res.status(400).json({ Error: 'allocationIds and newHostelId are required' });
+            }
+
+            const cleanIds = allocationIds.filter(Boolean);
+            if (cleanIds.length === 0) {
+                return res.status(400).json({ Error: 'No valid IDs provided' });
+            }
+
+            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+            const validObjectIds = cleanIds.filter(id => objectIdPattern.test(String(id)));
+            const nonObjectIds = cleanIds.filter(id => !objectIdPattern.test(String(id)));
+
+            const orConditions = [];
+            if (validObjectIds.length > 0) {
+                orConditions.push({ _id: { $in: validObjectIds } });
+                orConditions.push({ studentId: { $in: validObjectIds } });
+                orConditions.push({ regNo: { $in: validObjectIds } });
+            }
+            if (nonObjectIds.length > 0) {
+                orConditions.push({ regNo: { $in: nonObjectIds } });
+            }
+
+            if (orConditions.length === 0) return res.status(400).json({ Error: 'No valid IDs provided to query' });
+
+            const initialAllocations = await Allocation.find({
+                $or: orConditions,
+                active: true
+            });
+
+            if (!initialAllocations.length) {
+                return res.json({ Status: 'Error', Message: 'No active allocations found to change.' });
+            }
+
+            const studentIds = initialAllocations.map(a => a.studentId).filter(Boolean);
+            const regNos = initialAllocations.map(a => a.regNo).filter(Boolean);
+            
+            const studentIdStrings = new Set(studentIds.map(id => id.toString()));
+            const regNoStrings = new Set(regNos.map(r => String(r)));
+
+            const allStudentConditions = [];
+            if (studentIdStrings.size > 0) {
+                allStudentConditions.push({ studentId: { $in: Array.from(studentIdStrings) } });
+                allStudentConditions.push({ regNo: { $in: Array.from(studentIdStrings) } }); 
+            }
+            if (regNoStrings.size > 0) {
+                allStudentConditions.push({ regNo: { $in: Array.from(regNoStrings) } });
+            }
+
+            const allTargetAllocations = await Allocation.find({
+                $or: allStudentConditions,
+                active: true
+            });
+
+            const actualAllocationIds = allTargetAllocations.map(a => a._id);
+            const Room = require('../model/Room'); 
+
+            const outDateVal = changeDate ? new Date(changeDate) : new Date();
+            const noteVal = note || "Transferred to another hostel";
+
+            if (actualAllocationIds.length > 0) {
+                await Allocation.updateMany(
+                    { _id: { $in: actualAllocationIds } },
+                    { $set: { active: false, outDate: outDateVal, note: noteVal } }
+                );
+
+                const roomOccupancyDecrements = {};
+                const studentObjectIdsToRemove = [];
+
+                allTargetAllocations.forEach(alloc => {
+                    if (alloc.roomId) {
+                        const rId = alloc.roomId.toString();
+                        roomOccupancyDecrements[rId] = (roomOccupancyDecrements[rId] || 0) + 1;
+                    }
+                    if (alloc.studentId) studentObjectIdsToRemove.push(alloc.studentId);
+                    else if (objectIdPattern.test(String(alloc.regNo))) studentObjectIdsToRemove.push(alloc.regNo);
+                });
+
+                for (const [roomId, count] of Object.entries(roomOccupancyDecrements)) {
+                    await Room.updateOne(
+                        { _id: roomId },
+                        { $inc: { currentOccupants: -count }, $pullAll: { students: studentObjectIdsToRemove } }
+                    );
+                    await Room.updateOne(
+                        { _id: roomId, currentOccupants: { $lt: 4 } },
+                        { $set: { status: 'Availabe' } }
+                    );
+                }
+            }
+
+            const HostelAllocationHistory = require('../model/HostelAllocationHistory');
+            const historyDocs = [];
+            
+            const missingStudentIds = allTargetAllocations.filter(a => !a.studentId && a.regNo).map(a => a.regNo);
+            let legacyStudentsMap = new Map();
+            if(missingStudentIds.length) {
+                const ls = await Student.find({ enrolmentNo: { $in: missingStudentIds }});
+                ls.forEach(s => legacyStudentsMap.set(s.enrolmentNo, s._id));
+            }
+
+            allTargetAllocations.forEach(alloc => {
+                const sId = alloc.studentId || legacyStudentsMap.get(alloc.regNo) || (objectIdPattern.test(String(alloc.regNo)) ? alloc.regNo : null);
+                if (sId) {
+                    historyDocs.push({
+                        studentId: sId,
+                        previousHostelId: alloc.hostelID,
+                        previousRoomId: alloc.roomId,
+                        newHostelId: newHostelId,
+                        newRoomId: null,
+                        actionType: 'HOSTEL_CHANGE',
+                        actionDate: outDateVal,
+                        remark: noteVal,
+                        changedBy: req.user?.id || req.user?._id
+                    });
+                }
+            });
+
+            if(historyDocs.length > 0) {
+                await HostelAllocationHistory.insertMany(historyDocs);
+            }
+
+            const newAllocations = [];
+            const uniqueStudentsToAssign = new Map();
+            allTargetAllocations.forEach(alloc => {
+                 const key = alloc.studentId ? alloc.studentId.toString() : alloc.regNo;
+                 if(!uniqueStudentsToAssign.has(key)) {
+                     uniqueStudentsToAssign.set(key, { studentId: alloc.studentId, regNo: alloc.regNo });
+                 }
+            });
+
+            uniqueStudentsToAssign.forEach(info => {
+                 newAllocations.push({
+                     regNo: info.regNo || info.studentId,
+                     studentId: info.studentId,
+                     hostelID: newHostelId,
+                     academicYear: new Date().getFullYear().toString(),
+                     inDate: outDateVal,
+                     active: true,
+                 });
+            });
+
+            await Allocation.insertMany(newAllocations);
+
+            return res.json({ Status: 'Success', Message: `Successfully transferred students to the new hostel.` });
+        } catch (err) {
+            console.error('Error in changeHostel:', err);
             return res.status(500).json({ Error: 'Internal server error' });
         }
     },
@@ -405,6 +593,51 @@ const EligibilityController = {
             return res.json({ Status: 'Success', Message: 'Import list cleared.' });
         } catch (err) {
             console.error('Error in clearExcelImportList:', err);
+            return res.status(500).json({ Error: 'Internal server error' });
+        }
+    },
+
+    // Get allocation history for a specific student
+    getStudentAllocationHistory: async (req, res) => {
+        try {
+            const { studentId } = req.params;
+            const HostelAllocationHistory = require('../model/HostelAllocationHistory');
+            const mongoose = require('mongoose');
+
+            const orConditions = [];
+
+            // Search by ObjectId if valid
+            if (mongoose.Types.ObjectId.isValid(studentId)) {
+                orConditions.push({ studentId: studentId });
+            }
+
+            // Also try to find student by enrolmentNo to get their _id
+            const student = await Student.findOne({
+                $or: [
+                    ...(mongoose.Types.ObjectId.isValid(studentId) ? [{ _id: studentId }] : []),
+                    { enrolmentNo: studentId }
+                ]
+            });
+
+            if (student && !orConditions.some(c => c.studentId?.toString() === student._id.toString())) {
+                orConditions.push({ studentId: student._id });
+            }
+
+            if (orConditions.length === 0) {
+                return res.json({ Result: [] });
+            }
+
+            const history = await HostelAllocationHistory.find({ $or: orConditions })
+                .populate('previousHostelId', 'name hostelID')
+                .populate('previousRoomId', 'roomID roomNo')
+                .populate('newHostelId', 'name hostelID')
+                .populate('newRoomId', 'roomID roomNo')
+                .populate('changedBy', 'username email')
+                .sort({ actionDate: -1, createdAt: -1 });
+
+            return res.json({ Result: history });
+        } catch (err) {
+            console.error('Error in getStudentAllocationHistory:', err);
             return res.status(500).json({ Error: 'Internal server error' });
         }
     },

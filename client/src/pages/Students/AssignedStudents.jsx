@@ -14,6 +14,7 @@ const DEPARTMENT_MAP = {
 const AssignedStudents = () => {
     const [students, setStudents] = useState([])
     const [filteredList, setFilteredList] = useState([])
+    const [allHostels, setAllHostels] = useState([])
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('')
@@ -32,9 +33,18 @@ const AssignedStudents = () => {
         }).catch(err => console.error(err))
     }, [token]);
 
+    const fetchHostels = useCallback(() => {
+        axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then(res => {
+            setAllHostels(res.data.Result || [])
+        }).catch(err => console.error(err))
+    }, [token]);
+
     useEffect(() => {
         fetchStudents()
-    }, [fetchStudents])
+        fetchHostels()
+    }, [fetchStudents, fetchHostels])
 
     const getMainDept = enrolNo => {
         if (!enrolNo) return ''
@@ -198,6 +208,8 @@ const AssignedStudents = () => {
     const [selectedStudents, setSelectedStudents] = useState(new Set())
     const [showUnassignModal, setShowUnassignModal] = useState(false)
     const [isUnassigning, setIsUnassigning] = useState(false)
+    const [unassignNote, setUnassignNote] = useState('')
+    const [unassignDate, setUnassignDate] = useState(new Date().toISOString().split('T')[0])
 
     const toggleStudent = (id) => {
         const newSet = new Set(selectedStudents)
@@ -220,12 +232,16 @@ const AssignedStudents = () => {
         setIsUnassigning(true)
         try {
             await axios.post(import.meta.env.VITE_APP_API + '/eligibility/unassign-students', {
-                allocationIds: Array.from(selectedStudents)
+                allocationIds: Array.from(selectedStudents),
+                note: unassignNote,
+                changeDate: unassignDate
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             setShowUnassignModal(false)
             setSelectedStudents(new Set())
+            setUnassignNote('')
+            setUnassignDate(new Date().toISOString().split('T')[0])
             fetchStudents()
         } catch (err) {
             console.error("Error unassigning students:", err)
@@ -233,6 +249,40 @@ const AssignedStudents = () => {
             setShowUnassignModal(false)
         } finally {
             setIsUnassigning(false)
+        }
+    }
+
+    // Change Hostel Logic
+    const [showChangeModal, setShowChangeModal] = useState(false)
+    const [isChanging, setIsChanging] = useState(false)
+    const [newHostelId, setNewHostelId] = useState('')
+    const [changeNote, setChangeNote] = useState('')
+    const [changeDate, setChangeDate] = useState(new Date().toISOString().split('T')[0])
+
+    const handleChangeHostel = async () => {
+        if (!newHostelId) return alert('Please select a new hostel.')
+        setIsChanging(true)
+        try {
+            await axios.post(import.meta.env.VITE_APP_API + '/eligibility/change-hostel', {
+                allocationIds: Array.from(selectedStudents),
+                newHostelId,
+                note: changeNote,
+                changeDate
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setShowChangeModal(false)
+            setSelectedStudents(new Set())
+            setNewHostelId('')
+            setChangeNote('')
+            setChangeDate(new Date().toISOString().split('T')[0])
+            fetchStudents()
+        } catch (err) {
+            console.error("Error changing hostel:", err)
+            alert("Failed to change hostel. Please try refreshing the page and try again.")
+            setShowChangeModal(false)
+        } finally {
+            setIsChanging(false)
         }
     }
 
@@ -310,12 +360,20 @@ const AssignedStudents = () => {
                         </div>
                         Students Selected for Unassignment
                     </span>
-                    <button
-                        onClick={() => setShowUnassignModal(true)}
-                        className="bg-[#6b0f14] hover:bg-[#80141a] text-white px-5 py-2 rounded-md font-medium transition-colors shadow-sm"
-                    >
-                        Unassign Selected Students
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowChangeModal(true)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-medium transition-colors shadow-sm"
+                        >
+                            Change Hostel
+                        </button>
+                        <button
+                            onClick={() => setShowUnassignModal(true)}
+                            className="bg-[#6b0f14] hover:bg-[#80141a] text-white px-5 py-2 rounded-md font-medium transition-colors shadow-sm"
+                        >
+                            Unassign Selected Students
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -424,6 +482,27 @@ const AssignedStudents = () => {
                                 You are about to unassign <span className="font-bold text-red-600">{selectedStudents.size}</span> student(s) from their hostels.
                             </p>
                         </div>
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Unassignment Date</label>
+                                <input
+                                    type="date"
+                                    value={unassignDate}
+                                    onChange={(e) => setUnassignDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#6b0f14]"
+                                />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reason / Remark</label>
+                                <textarea
+                                    value={unassignNote}
+                                    onChange={(e) => setUnassignNote(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#6b0f14]"
+                                    rows="3"
+                                    placeholder="Enter reason for unassignment (e.g. Graduated, Suspended)"
+                                ></textarea>
+                            </div>
+                        </div>
                         <div className="p-6 bg-gray-50 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowUnassignModal(false)}
@@ -447,6 +526,76 @@ const AssignedStudents = () => {
                                 ) : (
                                     "Yes, Unassign"
                                 )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Change Hostel Modal */}
+            {showChangeModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                        <div className="bg-blue-50 p-6 flex flex-col items-center border-b border-blue-100">
+                            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 shadow-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 text-center">Change Hostel</h3>
+                            <p className="text-sm text-gray-500 mt-2 text-center">
+                                You are about to change the hostel for <span className="font-bold text-blue-600">{selectedStudents.size}</span> student(s).
+                            </p>
+                        </div>
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">New Hostel</label>
+                                <select
+                                    value={newHostelId}
+                                    onChange={(e) => setNewHostelId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                    <option value="">-- Select New Hostel --</option>
+                                    {allHostels.map(h => (
+                                        <option key={h._id} value={h._id}>
+                                            {h.name} ({h.gender})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Change Date</label>
+                                <input
+                                    type="date"
+                                    value={changeDate}
+                                    onChange={(e) => setChangeDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reason / Remark</label>
+                                <textarea
+                                    value={changeNote}
+                                    onChange={(e) => setChangeNote(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    rows="3"
+                                    placeholder="Enter reason for transfer"
+                                ></textarea>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-gray-50 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowChangeModal(false)}
+                                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:ring-4 focus:outline-none focus:ring-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleChangeHostel}
+                                disabled={isChanging || !newHostelId}
+                                className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                                {isChanging ? "Processing..." : "Change Hostel"}
                             </button>
                         </div>
                     </div>

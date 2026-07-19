@@ -352,9 +352,9 @@ const WardenController = {
                 await room.save();
             }
 
-            // Update allocation to mark as unassigned
+            // Update allocation to mark as unassigned from room, but keep it active in the hostel
             allocation.roomId = null;
-            allocation.active = false;
+            // allocation.active = false; // Intentionally left true so they stay in Warden's queue
             await allocation.save();
 
             // Update student isAssign flag if possible
@@ -372,8 +372,25 @@ const WardenController = {
             }
 
             if (student) {
-                student.isAssign = false;
+                // student.isAssign = false; // Intentionally skipped to prevent Admin from re-assigning them to another hostel
+                // We keep the student 'assigned' at the hostel level
                 await student.save();
+            }
+
+            const HostelAllocationHistory = require('../model/HostelAllocationHistory');
+            const targetStudentId = student ? student._id : (allocation.studentId || null);
+            
+            if (targetStudentId) {
+                await HostelAllocationHistory.create({
+                    studentId: targetStudentId,
+                    previousHostelId: allocation.hostelID,
+                    previousRoomId: roomId,
+                    newHostelId: allocation.hostelID,
+                    newRoomId: null,
+                    actionType: 'UNASSIGN_ROOM',
+                    remark: req.body.remark || "Unassigned from room by Warden",
+                    changedBy: userId
+                });
             }
 
             return res.json({ Status: 'Success', Message: 'Student unassigned successfully' });

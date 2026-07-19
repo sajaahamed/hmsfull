@@ -2,6 +2,7 @@ import axios from 'axios'
 import React, { useState, useEffect } from 'react'
 import DefaultInput from '../../components/Form/DefaultInput'
 import DefaultBtn from '../../components/Buttons/DefaultBtn'
+import { getUserInfoFromToken } from '../../utils/auth'
 
 const AdminCreateSpecialNeed = () => {
     const [enrolmentNo, setEnrolmentNo] = useState('')
@@ -11,6 +12,13 @@ const AdminCreateSpecialNeed = () => {
     const [existingNeeds, setExistingNeeds] = useState([])
 
     const token = localStorage.getItem('login')
+
+    const userInfo = getUserInfoFromToken()
+    const rawRoles = userInfo?.roles || []
+    const roleNames = Array.isArray(rawRoles)
+        ? rawRoles.map(r => (typeof r === 'string' ? r : r.name))
+        : [typeof rawRoles === 'string' ? rawRoles : rawRoles?.name];
+    const isWarden = roleNames.includes('warden')
 
     const fetchNeeds = React.useCallback(async () => {
         try {
@@ -64,8 +72,10 @@ const AdminCreateSpecialNeed = () => {
 
     return (
         <div className="p-6 max-w-2xl mx-auto">
-            <h1 className="text-3xl font-bold text-[#6b0f14] mb-6">Add Special Need Student</h1>
-            
+            {!isWarden && (
+                <>
+                    <h1 className="text-3xl font-bold text-[#6b0f14] mb-6">Add Special Need Student</h1>
+                    
             <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
@@ -123,8 +133,10 @@ const AdminCreateSpecialNeed = () => {
                     <li>Once assigned to a hostel, they will appear in the Warden's Special Needs list.</li>
                 </ul>
             </div>
+            </>
+            )}
 
-            <div className="mt-12">
+            <div className={`mt-12 ${isWarden ? 'mt-0' : ''}`}>
                 <h2 className="text-xl font-bold text-[#6b0f14] mb-4">Added Special Needs</h2>
                 <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
                     <div className="overflow-x-auto">

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useParams, Navigate } from 'react-router-dom';
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
 import DefaultInput from '../../components/Form/DefaultInput';
@@ -11,6 +11,8 @@ const ViewStudent = () => {
     const [stdData, setStdData] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({});
+    const [history, setHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const token = localStorage.getItem('login');
 
     const userInfo = getUserInfoFromToken();
@@ -23,6 +25,21 @@ const ViewStudent = () => {
     const allowedRoles = ['warden', 'admin', 'director'];
     const isAuthorized = userRoles.some(role => allowedRoles.includes(role));
 
+    const fetchHistory = useCallback(async (studentId) => {
+        if (!studentId || !token) return;
+        setHistoryLoading(true);
+        try {
+            const res = await axios.get(`${import.meta.env.VITE_APP_API}/eligibility/allocation-history/${studentId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setHistory(res.data.Result || []);
+        } catch (err) {
+            console.error('Failed to fetch allocation history:', err);
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, [token]);
+
     useEffect(() => {
         axios.get(`${import.meta.env.VITE_APP_API}/student/get-student-byID/${id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -30,9 +47,13 @@ const ViewStudent = () => {
             .then(res => {
                 setStdData(res.data.Result);
                 setFormData(res.data.Result);
+                // Fetch history using the student's _id
+                if (res.data.Result?._id) {
+                    fetchHistory(res.data.Result._id);
+                }
             })
             .catch(err => console.log(err));
-    }, [id, token]);
+    }, [id, token, fetchHistory]);
 
     if (!isAuthorized) {
         return <Navigate to="/" replace />;
@@ -151,6 +172,189 @@ const ViewStudent = () => {
                     </div>
                 </form>
             )}
+
+            {/* ── Hostel Movement History ── */}
+            <div className="mt-8 border-t pt-6">
+                <h2 className="text-xl font-bold text-[#6b0f14] mb-4 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Hostel Movement History
+                </h2>
+
+                {historyLoading ? (
+                    <p className="text-gray-500 text-sm">Loading history...</p>
+                ) : history.length === 0 ? (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                        <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="text-gray-400 mt-2 text-sm">No hostel movement history found for this student.</p>
+                    </div>
+                ) : (
+                    <div className="relative">
+                        {/* Timeline line */}
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+
+                        <div className="space-y-4">
+                            {history.map((item, index) => {
+                                const actionConfig = {
+                                    UNASSIGN_ROOM: {
+                                        label: 'Room Removed',
+                                        color: 'bg-amber-500',
+                                        bgColor: 'bg-amber-50',
+                                        borderColor: 'border-amber-200',
+                                        textColor: 'text-amber-700',
+                                        icon: '🚪'
+                                    },
+                                    HOSTEL_CHANGE: {
+                                        label: 'Hostel Transfer',
+                                        color: 'bg-blue-500',
+                                        bgColor: 'bg-blue-50',
+                                        borderColor: 'border-blue-200',
+                                        textColor: 'text-blue-700',
+                                        icon: '🔄'
+                                    },
+                                    UNASSIGN_HOSTEL: {
+                                        label: 'Removed from Hostel',
+                                        color: 'bg-red-500',
+                                        bgColor: 'bg-red-50',
+                                        borderColor: 'border-red-200',
+                                        textColor: 'text-red-700',
+                                        icon: '❌'
+                                    },
+                                    ASSIGN_HOSTEL: {
+                                        label: 'Assigned to Hostel',
+                                        color: 'bg-green-500',
+                                        bgColor: 'bg-green-50',
+                                        borderColor: 'border-green-200',
+                                        textColor: 'text-green-700',
+                                        icon: '✅'
+                                    },
+                                    ASSIGN_ROOM: {
+                                        label: 'Room Assigned',
+                                        color: 'bg-teal-500',
+                                        bgColor: 'bg-teal-50',
+                                        borderColor: 'border-teal-200',
+                                        textColor: 'text-teal-700',
+                                        icon: '🏠'
+                                    }
+                                };
+
+                                const config = actionConfig[item.actionType] || {
+                                    label: item.actionType,
+                                    color: 'bg-gray-500',
+                                    bgColor: 'bg-gray-50',
+                                    borderColor: 'border-gray-200',
+                                    textColor: 'text-gray-700',
+                                    icon: '📋'
+                                };
+
+                                const prevHostel = item.previousHostelId?.name || '-';
+                                const prevRoom = item.previousRoomId?.roomID || item.previousRoomId?.roomNo || '-';
+                                const newHostel = item.newHostelId?.name || '-';
+                                const newRoom = item.newRoomId?.roomID || item.newRoomId?.roomNo || '-';
+                                const changedBy = item.changedBy?.username || item.changedBy?.email || '-';
+                                const actionDate = item.actionDate ? new Date(item.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+
+                                return (
+                                    <div key={item._id || index} className="relative pl-10">
+                                        {/* Timeline dot */}
+                                        <div className={`absolute left-2.5 w-3.5 h-3.5 rounded-full ${config.color} border-2 border-white shadow`}></div>
+
+                                        <div className={`${config.bgColor} border ${config.borderColor} rounded-lg p-4 shadow-sm`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${config.bgColor} ${config.textColor} border ${config.borderColor}`}>
+                                                    {config.icon} {config.label}
+                                                </span>
+                                                <span className="text-xs text-gray-500 font-medium">{actionDate}</span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs mt-2">
+                                                {(item.actionType === 'HOSTEL_CHANGE') && (
+                                                    <>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">From Hostel: </span>
+                                                            <span className="text-gray-800">{prevHostel}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">To Hostel: </span>
+                                                            <span className="text-gray-800">{newHostel}</span>
+                                                        </div>
+                                                        {prevRoom !== '-' && (
+                                                            <div>
+                                                                <span className="font-semibold text-gray-600">Previous Room: </span>
+                                                                <span className="text-gray-800">{prevRoom}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {(item.actionType === 'UNASSIGN_HOSTEL') && (
+                                                    <>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">Hostel: </span>
+                                                            <span className="text-gray-800">{prevHostel}</span>
+                                                        </div>
+                                                        {prevRoom !== '-' && (
+                                                            <div>
+                                                                <span className="font-semibold text-gray-600">Room: </span>
+                                                                <span className="text-gray-800">{prevRoom}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {(item.actionType === 'UNASSIGN_ROOM') && (
+                                                    <>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">Hostel: </span>
+                                                            <span className="text-gray-800">{prevHostel}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">Room Removed: </span>
+                                                            <span className="text-gray-800">{prevRoom}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {(item.actionType === 'ASSIGN_HOSTEL' || item.actionType === 'ASSIGN_ROOM') && (
+                                                    <>
+                                                        <div>
+                                                            <span className="font-semibold text-gray-600">Hostel: </span>
+                                                            <span className="text-gray-800">{newHostel !== '-' ? newHostel : prevHostel}</span>
+                                                        </div>
+                                                        {(newRoom !== '-') && (
+                                                            <div>
+                                                                <span className="font-semibold text-gray-600">Room: </span>
+                                                                <span className="text-gray-800">{newRoom}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                <div>
+                                                    <span className="font-semibold text-gray-600">Changed By: </span>
+                                                    <span className="text-gray-800">{changedBy}</span>
+                                                </div>
+                                            </div>
+
+                                            {item.remark && (
+                                                <div className="mt-2 pt-2 border-t border-gray-200">
+                                                    <p className="text-xs text-gray-600">
+                                                        <span className="font-semibold">Remark: </span>
+                                                        <span className="italic">&ldquo;{item.remark}&rdquo;</span>
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
@@ -163,3 +367,4 @@ const Detail = ({ label, value }) => (
 );
 
 export default ViewStudent;
+
