@@ -1,5 +1,64 @@
 import { jwtDecode } from 'jwt-decode';
 
+const KNOWN_ROLE_NAMES = new Set(['student', 'warden', 'admin', 'director']);
+const CURRENT_USER_KEY = 'currentUser';
+
+export function getRoleNamesFromRoles(roles) {
+    const roleList = Array.isArray(roles) ? roles : [roles].filter(Boolean);
+
+    return [...new Set(roleList
+        .map(role => {
+            const value = typeof role === 'string'
+                ? role
+                : role?.name || role?.role || role?._doc?.name;
+
+            const normalized = String(value || '').trim().toLowerCase();
+            return KNOWN_ROLE_NAMES.has(normalized) ? normalized : null;
+        })
+        .filter(Boolean))];
+}
+
+export function getRoleNames(userInfoOrRoles) {
+    if (!userInfoOrRoles) return [];
+
+    if (Array.isArray(userInfoOrRoles)) {
+        return getRoleNamesFromRoles(userInfoOrRoles);
+    }
+
+    if (Array.isArray(userInfoOrRoles.roleNames)) {
+        return userInfoOrRoles.roleNames;
+    }
+
+    return getRoleNamesFromRoles(userInfoOrRoles.roles);
+}
+
+export function cacheCurrentUser(user) {
+    try {
+        if (user) {
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+        }
+    } catch {
+        // Ignore storage failures.
+    }
+}
+
+export function getCachedUserInfo() {
+    try {
+        const cached = localStorage.getItem(CURRENT_USER_KEY);
+        if (!cached) return null;
+
+        const user = JSON.parse(cached);
+        return {
+            username: user?.username || null,
+            email: user?.email || null,
+            roles: user?.roles || [],
+            roleNames: getRoleNamesFromRoles(user?.roles || []),
+        };
+    } catch {
+        return null;
+    }
+}
+
 export function getUserInfoFromToken() {
     const token = localStorage.getItem('login');
     // console.log("TOKEN FROM STORAGE:", token);
@@ -11,7 +70,9 @@ export function getUserInfoFromToken() {
 
         const username = decoded.username || decoded.user?.username || null;
         const email = decoded.email || decoded.user?.email || null;
-        const roles = decoded.role || decoded.roles || decoded.user?.roles || [];
+        const roles = decoded.roles || decoded.role || decoded.user?.roles || [];
+        const roleNames = getRoleNamesFromRoles(roles);
+        const cachedUser = roleNames.length === 0 ? getCachedUserInfo() : null;
 
         // NOTE: Removed strict check that required all of username, email, and roles
         // to be present. Some users (e.g. students) may have partially missing data
@@ -24,7 +85,12 @@ export function getUserInfoFromToken() {
             localStorage.setItem('loginE', email);
         }
 
-        return { username, email, roles };
+        return {
+            username: username || cachedUser?.username,
+            email: email || cachedUser?.email,
+            roles: roleNames.length > 0 ? roles : cachedUser?.roles || roles,
+            roleNames: roleNames.length > 0 ? roleNames : cachedUser?.roleNames || [],
+        };
     } catch (error) {
         console.error('Invalid token', error);
         return null;

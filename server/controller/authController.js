@@ -283,16 +283,21 @@ const authController = {
                 return res.json({ Error: "The Password is Not Match" })
             }
 
+            const tokenRoles = (checkuser.roles || []).map(role => ({
+                _id: String(role._id || role),
+                name: String(role.name || '').toLowerCase(),
+            })).filter(role => role.name);
+
             // Do not embed password hash in the token payload.
             const safeUser = {
                 _id: checkuser._id,
                 username: checkuser.username,
                 email: checkuser.email,
-                roles: checkuser.roles,
+                roles: tokenRoles,
                 profileImage: checkuser.profileImage || ''
             };
 
-            const token = jwt.sign({ id: checkuser._id, role: checkuser.roles, user: safeUser }, process.env.JWT_SECRET, { expiresIn: '10h' });
+            const token = jwt.sign({ id: checkuser._id, roles: tokenRoles, role: tokenRoles, user: safeUser }, process.env.JWT_SECRET, { expiresIn: '10h' });
 
             if (token) {
                 return res.json({ Status: "Success", Message: "Login Success", Token: token })

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './utils/api'
 import App from './App.jsx'
 
 // Add a CSS class when running on Surface Duo devices so styles
@@ -9,7 +10,7 @@ try {
   if (typeof navigator !== 'undefined' && /Surface Duo|SurfaceDuo/i.test(navigator.userAgent)) {
     document.documentElement.classList.add('surface-duo')
   }
-} catch (e) {
+} catch {
   // defensive: ignore in environments without navigator/document
 }
 
@@ -36,7 +37,7 @@ try {
       setTimeout(() => window.scrollTo(0, 0), 100)
     })
   }
-} catch (e) {
+} catch {
   // ignore
 }
 

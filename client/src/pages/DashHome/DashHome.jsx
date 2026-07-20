@@ -1,5 +1,5 @@
 import React from 'react';
-import { getUserInfoFromToken } from '../../utils/auth'; // Adjust path accordingly
+import { getRoleNames, getUserInfoFromToken } from '../../utils/auth'; // Adjust path accordingly
 
 
 const DashHome = () => {
@@ -16,9 +16,7 @@ const DashHome = () => {
         );
     }
 
-    // Handle roles as either [{ name: 'admin' }] or ['admin']
-    const roleRaw = userInfo.roles[0];
-    const role = typeof roleRaw === 'string' ? roleRaw.toLowerCase() : roleRaw?.name?.toLowerCase();
+    const role = getRoleNames(userInfo)[0];
 
     let dashboardText = 'Dashboard';
 

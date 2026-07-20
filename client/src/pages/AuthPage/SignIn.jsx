@@ -61,6 +61,7 @@ const SignIn = () => {
 
             if (res.data.Status === 'Success') {
                 alert(res.data.Message);
+                localStorage.removeItem('currentUser');
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
                 

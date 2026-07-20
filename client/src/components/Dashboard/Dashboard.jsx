@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { getUserInfoFromToken } from '../../utils/auth';
+import axios from 'axios';
+import { cacheCurrentUser, getRoleNames, getUserInfoFromToken } from '../../utils/auth';
+import { API_BASE_URL } from '../../utils/api';
 import DashSide from './DashSide';
 import DashNav from './DashNav';
 import DashFooter from './DashFooter';
@@ -17,6 +19,27 @@ const Dashboard = () => {
             navigate('/');
         } else {
             setUser(userInfo);
+
+            if (getRoleNames(userInfo).length === 0) {
+                const token = localStorage.getItem('login');
+
+                axios.get(`${API_BASE_URL}/auth/get-currentuser-data`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                }).then(res => {
+                    const currentUser = res.data?.Result;
+                    if (!currentUser) return;
+
+                    cacheCurrentUser(currentUser);
+                    setUser(prev => ({
+                        ...prev,
+                        username: currentUser.username || prev?.username,
+                        email: currentUser.email || prev?.email,
+                        roles: currentUser.roles || prev?.roles || [],
+                    }));
+                }).catch(error => {
+                    console.warn('Unable to refresh current user data', error);
+                });
+            }
         }
     }, [navigate]);
 
@@ -42,7 +65,7 @@ const Dashboard = () => {
                     ${sideOpen ? 'translate-x-0' : '-translate-x-full'}`}
                     style={{ background: 'linear-gradient(180deg, #6b0f14, #4f0a0f)' }}
                 >
-                    <DashSide toggleSide={toggleSide} />
+                    <DashSide toggleSide={toggleSide} user={user} />
                 </aside>
 
                 {/* Hamburger — mobile only, shown when sidebar is closed */}
@@ -64,7 +87,7 @@ const Dashboard = () => {
 
                     {/* Header */}
                     <header className="sticky top-0 z-40 bg-white shadow-md">
-                        <DashNav />
+                        <DashNav user={user} />
                     </header>
 
                     {/* Page Content */}

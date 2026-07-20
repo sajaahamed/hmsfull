@@ -1,22 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getUserInfoFromToken } from '../../utils/auth';
+import { getRoleNames, getUserInfoFromToken } from '../../utils/auth';
 import { dashsidedata } from './DashSideData';
 import uoplogo from '../../assets/uoplogo.png';
 import DashUser from '../../assets/new_profilePic.jpg';
 
-const DashSide = ({ toggleSide }) => {
+const DashSide = ({ toggleSide, user }) => {
     const [activeMenu, setActiveMenu] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
 
-    const { username, roles } = getUserInfoFromToken() || {};
+    const fallbackUserInfo = useMemo(() => getUserInfoFromToken() || {}, []);
+    const userInfo = user || fallbackUserInfo;
+    const { username } = userInfo;
 
-    const roleNames = useMemo(() => Array.isArray(roles)
-        ? roles.map(r => (typeof r === 'string' ? r : r.name))
-        : [typeof roles === 'string' ? roles : roles?.name], [roles]);
+    const roleNames = useMemo(() => getRoleNames(userInfo), [userInfo]);
 
-    const filteredMenu = dashsidedata.filter(item => {
+    const filteredMenu = useMemo(() => dashsidedata.filter(item => {
         if (roleNames.includes('admin') || roleNames.includes('director')) {
             return ![3, 5, 7, 12, 13, 14].includes(item.id);
         }
@@ -27,7 +27,7 @@ const DashSide = ({ toggleSide }) => {
             return ![2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21].includes(item.id);
         }
         return false;
-    });
+    }), [roleNames]);
 
     const profileItem = filteredMenu.find(item => item.id === 8);
     const mainMenu = filteredMenu.filter(item => item.id !== 8);

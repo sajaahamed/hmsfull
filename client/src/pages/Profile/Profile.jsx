@@ -5,6 +5,7 @@ import FileInput from '../../components/Form/FileInput';
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
 import DashUser from '../../assets/new_profilePic.jpg';
 import axios from 'axios';
+import { API_BASE_URL, resolveApiUrl } from '../../utils/api';
 
 const Profile = () => {
     const [btnClick, setBtnClick] = useState(false);
@@ -13,10 +14,10 @@ const Profile = () => {
     const handleBtnClick = () => setBtnClick(!btnClick);
 
     const [mydata, setmydata] = useState({});
-    const apiBase = import.meta.env.VITE_APP_API;
+    const apiBase = API_BASE_URL;
 
     const profileImageSrc = mydata?.profileImage
-        ? (mydata.profileImage.startsWith('http') ? mydata.profileImage : `${apiBase}${mydata.profileImage}`)
+        ? resolveApiUrl(mydata.profileImage)
         : DashUser;
 
     useEffect(() => {
@@ -30,7 +31,7 @@ const Profile = () => {
     useEffect(() => {
         if (mydata?.profileImage) {
             const img = mydata.profileImage.startsWith('http')
-                ? mydata.profileImage
+                ? resolveApiUrl(mydata.profileImage)
                 : `${apiBase}${mydata.profileImage}`;
             localStorage.setItem('profileImage', img);
             window.dispatchEvent(new CustomEvent('profileImageUpdated', { detail: img }));
@@ -61,7 +62,7 @@ const Profile = () => {
                 setmydata(res.data.Result || mydata);
                 const newImg = res.data.Result?.profileImage
                     ? (res.data.Result.profileImage.startsWith('http')
-                        ? res.data.Result.profileImage
+                        ? resolveApiUrl(res.data.Result.profileImage)
                         : `${apiBase}${res.data.Result.profileImage}`)
                     : DashUser;
                 localStorage.setItem('profileImage', newImg);

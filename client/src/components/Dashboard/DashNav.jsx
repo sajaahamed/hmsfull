@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FaUserCog } from 'react-icons/fa';
 import { FaGear, FaPowerOff, FaChevronRight, FaBell } from 'react-icons/fa6';
-import { getUserInfoFromToken } from '../../utils/auth';
+import { getRoleNames, getUserInfoFromToken } from '../../utils/auth';
+import { resolveApiUrl } from '../../utils/api';
 import DashUser from '../../assets/new_profilePic.jpg';
 
 // Derive a readable page title from the current path
@@ -15,29 +16,28 @@ const getPageTitle = (pathname) => {
         .replace(/\b\w/g, c => c.toUpperCase());
 };
 
-const DashNav = () => {
+const DashNav = ({ user }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
     const location = useLocation();
 
-    const { username, roles } = getUserInfoFromToken() || {};
-    const role = roles?.[0]?.name || '';
-    const roleNames = Array.isArray(roles)
-        ? roles.map(r => (typeof r === 'string' ? r : r?.name)).filter(Boolean)
-        : [typeof roles === 'string' ? roles : roles?.name].filter(Boolean);
+    const userInfo = user || getUserInfoFromToken() || {};
+    const { username } = userInfo;
+    const roleNames = getRoleNames(userInfo);
+    const role = roleNames[0] || '';
     const canSeeBackup = roleNames.some(r => r === 'admin' || r === 'director');
 
     const pageTitle = getPageTitle(location.pathname);
 
     const [profileImage, setProfileImage] = useState(() => {
-        try { return localStorage.getItem('profileImage') || DashUser; }
+        try { return resolveApiUrl(localStorage.getItem('profileImage')) || DashUser; }
         catch { return DashUser; }
     });
 
     useEffect(() => {
         const handler = (e) => {
             try {
-                const img = e?.detail || localStorage.getItem('profileImage') || DashUser;
+                const img = resolveApiUrl(e?.detail || localStorage.getItem('profileImage')) || DashUser;
                 setProfileImage(img);
             } catch { setProfileImage(DashUser); }
         };
