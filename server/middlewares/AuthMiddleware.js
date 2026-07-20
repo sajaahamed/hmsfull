@@ -11,12 +11,13 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.id || decoded._id || decoded.user?._id || decoded.user?.id;
 
-        if (!decoded.id) {
+        if (!userId) {
             return res.status(400).json({ message: 'Invalid token payload: missing user ID' });
         }
 
-        req.user = { id: decoded.id };
+        req.user = { id: userId };
         next();
 
     } catch (error) {

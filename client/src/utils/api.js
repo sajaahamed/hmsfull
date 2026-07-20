@@ -27,14 +27,14 @@ const getRuntimeApiBase = () => {
     const pageHost = window.location.hostname;
 
     if (!configuredApiBase) {
-        return `${window.location.protocol}//${pageHost}:${DEFAULT_API_PORT}`;
+        return getSameHostApiBase();
     }
 
     try {
         const apiUrl = new URL(configuredApiBase);
 
         if (isLocalHost(apiUrl.hostname) && !isLocalHost(pageHost)) {
-            return `${window.location.origin}/api`;
+            return getSameHostApiBase();
         }
 
         return apiUrl.toString().replace(/\/$/, '');
@@ -45,6 +45,18 @@ const getRuntimeApiBase = () => {
 
 export const API_BASE_URL = getRuntimeApiBase();
 const SAME_HOST_API_BASE_URL = getSameHostApiBase();
+
+const shouldRetryWithSameHostApi = (config) => config
+    && !config._sameHostApiFallbackTried
+    && API_BASE_URL !== SAME_HOST_API_BASE_URL
+    && typeof config.url === 'string'
+    && config.url.startsWith(API_BASE_URL);
+
+const retryWithSameHostApi = (config) => {
+    config._sameHostApiFallbackTried = true;
+    config.url = `${SAME_HOST_API_BASE_URL}${config.url.slice(API_BASE_URL.length)}`;
+    return axios(config);
+};
 
 export const resolveApiUrl = (url = '') => {
     if (!url) return url;
@@ -79,22 +91,23 @@ axios.interceptors.request.use((config) => {
 });
 
 axios.interceptors.response.use(
-    response => response,
+    response => {
+        const data = response?.data;
+        const looksLikeFrontendHtml = typeof data === 'string'
+            && /<html|<!doctype html/i.test(data);
+
+        if (looksLikeFrontendHtml && shouldRetryWithSameHostApi(response.config)) {
+            return retryWithSameHostApi(response.config);
+        }
+
+        return response;
+    },
     error => {
         const originalConfig = error.config;
-        const canRetryWithSameHost = originalConfig
-            && !originalConfig._sameHostApiFallbackTried
-            && API_BASE_URL !== SAME_HOST_API_BASE_URL
-            && typeof originalConfig.url === 'string'
-            && originalConfig.url.startsWith(API_BASE_URL);
-
-        if (!canRetryWithSameHost) {
+        if (!shouldRetryWithSameHostApi(originalConfig)) {
             return Promise.reject(error);
         }
 
-        originalConfig._sameHostApiFallbackTried = true;
-        originalConfig.url = `${SAME_HOST_API_BASE_URL}${originalConfig.url.slice(API_BASE_URL.length)}`;
-
-        return axios(originalConfig);
+        return retryWithSameHostApi(originalConfig);
     }
 );
