@@ -4,6 +4,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const Student = require('../model/Student');
 const Allocation = require('../model/Allocation');
+const Payment = require('../model/Payment');
 const Hostel = require('../model/Hostel');
 const SpecialNeeds = require('../model/SpecialNeeds');
 const EmergencyContact = require('../model/EmergencyContact');
@@ -833,10 +834,18 @@ const StudentController = {
                     ]
                 }).lean();
 
+                const dbStudentIds = students.map(s => s._id);
+                const payments = await Payment.find({ type: 'hostel-fee', paymentStatus: 'Paid', studentId: { $in: dbStudentIds } }).lean();
+                const feeByStudentId = new Map();
+                payments.forEach(p => {
+                    feeByStudentId.set(p.studentId.toString(), p.hallFee || p.amount || 0);
+                });
+
                 const enriched = (students || []).map(s => ({
                     ...s,
                     hostelId: hostelIdStr,
-                    hostelName
+                    hostelName,
+                    hallFee: feeByStudentId.get(s._id.toString()) || null
                 }));
 
                 return res.json({ Result: enriched });
@@ -907,13 +916,21 @@ const StudentController = {
                 });
             }
 
+            const payments = await Payment.find({ type: 'hostel-fee', paymentStatus: 'Paid', studentId: { $in: studentIds } }).lean();
+            const feeByStudentId = new Map();
+            payments.forEach(p => {
+                feeByStudentId.set(p.studentId.toString(), p.hallFee || p.amount || 0);
+            });
+
             const enrichedStudents = students.map(s => {
                 const sid = s._id.toString();
                 const hostel = hostelByStudentId.get(sid);
+                const hallFee = feeByStudentId.get(sid) || null;
                 return {
                     ...s,
                     hostelId: hostel ? hostel.hostelId : null,
                     hostelName: hostel ? hostel.hostelName : null,
+                    hallFee
                 };
             });
 

@@ -1135,7 +1135,7 @@ const Reports = () => {
             </div>
 
             {showPreviewModal && previewData && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print-modal-overlay">
+                <div className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4 print-modal-overlay">
                     <style>
                         {`
                             @media print {
@@ -1147,15 +1147,15 @@ const Reports = () => {
                     </style>
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden print-modal-container">
                         {/* Action Bar */}
-                        <div className="flex flex-wrap justify-between items-center p-6 border-b bg-gray-50 print-hide">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 md:p-6 border-b bg-gray-50 print-hide">
                             <h2 className="text-xl font-bold text-gray-800">Preview: {previewData.title}</h2>
-                            <div className="flex gap-3">
-                                <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium">Close</button>
+                            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                <button onClick={() => setShowPreviewModal(false)} className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium whitespace-nowrap text-sm md:text-base">Close</button>
                                 {previewData.reportId === 'payments' && (
-                                    <button onClick={() => { setShowPreviewModal(false); setShowPaymentFilterModal(true); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium">Edit Filters</button>
+                                    <button onClick={() => { setShowPreviewModal(false); setShowPaymentFilterModal(true); }} className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium whitespace-nowrap text-sm md:text-base">Edit Filters</button>
                                 )}
-                                <button onClick={() => window.print()} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 font-medium">Export PDF</button>
-                                <button onClick={() => handleDownload(previewData.reportId, () => exportGenericExcel(previewData))} className="px-4 py-2 bg-[#6b0f14] text-white rounded-lg hover:bg-[#4f0a0f] font-medium">Export Excel</button>
+                                <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 font-medium whitespace-nowrap text-sm md:text-base">Export PDF</button>
+                                <button onClick={() => handleDownload(previewData.reportId, () => exportGenericExcel(previewData))} className="flex-1 md:flex-none px-4 py-2 bg-[#6b0f14] text-white rounded-lg hover:bg-[#4f0a0f] font-medium whitespace-nowrap text-sm md:text-base">Export Excel</button>
                             </div>
                         </div>
 

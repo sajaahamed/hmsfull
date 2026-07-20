@@ -1,6 +1,8 @@
 import axios from 'axios'
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import ExcelJS from 'exceljs'
+import { saveAs } from 'file-saver'
 
 import DefaultInput from '../../components/Form/DefaultInput'
 import { FaFemale, FaMale, FaUserTie } from 'react-icons/fa'
@@ -29,6 +31,8 @@ const AllStudents = () => {
     const [assignedYearFilter, setAssignedYearFilter] = useState('')
     const [hostelFilter, setHostelFilter] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
+    const [showPreviewModal, setShowPreviewModal] = useState(false)
+    const [previewData, setPreviewData] = useState(null)
     const recordsPerPage = 15
     const token = localStorage.getItem('login')
 
@@ -285,57 +289,161 @@ const AllStudents = () => {
         currentPage * recordsPerPage
     )
 
-    const exportToCSV = () => {
-        const headers = [
-            'No', 'Enrolment No', 'Name', 'A/L District',
-            'Sex', 'NIC', 'Address Line 1', 'Address Line 2', 'Address Line 3', 'Full Address',
-            'Intake', 'Batch', 'Main Department', 'Date of Enrolment', 'Study Year', 'Distance (Km)', 'Hostel Assigned'
-        ]
-        const rows = filteredStudents.map(std => {
-            let studyYear = ''
+
+    const prepareStudentReport = () => {
+        const columns = ['No', 'Enrolment No', 'Student Name', 'Faculty(Department)', 'Batch', 'Study Year', 'Hall Fee']
+        const rows = filteredStudents.map((std, idx) => {
+            let studyYear = '-'
             if (std.dateOfEnrolment) {
                 const currentYear = new Date().getFullYear()
                 const enrolYear = new Date(std.dateOfEnrolment).getFullYear()
                 studyYear = `Year ${(currentYear - enrolYear) + 1}`
             }
 
-            let batch = ''
+            let batch = '-'
             if (std.enrolmentNo) {
                 const parts = std.enrolmentNo.split('/')
                 if (parts.length >= 2) {
-                    batch = `${parts[0]}/${parts[1]}/`
+                    batch = `${parts[0]}/${parts[1]}`.toUpperCase()
                 }
             }
+
             const mainDeptCode = getMainDept(std.enrolmentNo)
-            const mainDept = DEPARTMENT_MAP[mainDeptCode] || mainDeptCode
+            const mainDept = DEPARTMENT_MAP[mainDeptCode] || mainDeptCode || '-'
 
             return [
-                std.no || '', std.enrolmentNo || '', std.name || '', std.alDistrict || '', std.sex || '',
-                (std.nic ? "'" + std.nic : ''), std.address1 || '', std.address2 || '',
-                std.address3 || '', std.fullAddress || '',
-                std.intake || '', batch, mainDept,
-                std.dateOfEnrolment ? new Date(std.dateOfEnrolment).toLocaleDateString() : '',
+                idx + 1,
+                std.enrolmentNo || '-',
+                std.name || '-',
+                mainDept,
+                batch,
                 studyYear,
-                std.distance ?? '', (std.hostelName || (isStudentAssigned(std) ? 'Assigned' : 'Not Assigned'))
+                std.hallFee ? std.hallFee : '..........'
             ]
         })
 
-        const escapeField = (v) => {
-            if (v === null || v === undefined) return ''
-            const s = String(v)
-            return '"' + s.replace(/"/g, '""') + '"'
-        }
+        const totalRow = ['Total', `${filteredStudents.length} Students`, '', '', '', '', '']
 
-        const csvContent = 'data:text/csv;charset=utf-8,' +
-            [headers.join(','), ...rows.map(row => row.map(field => escapeField(field)).join(','))].join('\n')
+        setPreviewData({
+            reportId: 'students',
+            title: 'Student List',
+            headers: [
+                'UNIVERSITY OF PERADENIYA',
+                'STUDENT LIST REPORT',
+                `Generated on ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
+            ],
+            columns,
+            rows,
+            totalRow,
+            fileName: 'Student_List_Report'
+        })
+        setShowPreviewModal(true)
+    }
 
-        const encodedUri = encodeURI(csvContent)
-        const link = document.createElement('a')
-        link.setAttribute('href', encodedUri)
-        link.setAttribute('download', 'students_export.csv')
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+    const handlePreviewHeaderEdit = (index, value) => {
+        setPreviewData(prev => {
+            const newHeaders = [...prev.headers]
+            newHeaders[index] = value
+            return { ...prev, headers: newHeaders }
+        })
+    }
+
+    const handlePreviewCellEdit = (rowIdx, colIdx, value) => {
+        setPreviewData(prev => {
+            const newRows = prev.rows.map(r => [...r])
+            newRows[rowIdx][colIdx] = value
+            return { ...prev, rows: newRows }
+        })
+    }
+
+    const handlePreviewTotalEdit = (colIdx, value) => {
+        setPreviewData(prev => {
+            const newTotal = [...prev.totalRow]
+            newTotal[colIdx] = value
+            return { ...prev, totalRow: newTotal }
+        })
+    }
+
+    const previewColumnWidths = useMemo(() => {
+        if (!previewData) return []
+        return previewData.columns.map((col, i) => {
+            let maxLen = String(col ?? '').length
+            previewData.rows.forEach(r => {
+                const len = String(r[i] ?? '').length
+                if (len > maxLen) maxLen = len
+            })
+            if (previewData.totalRow) {
+                const len = String(previewData.totalRow[i] ?? '').length
+                if (len > maxLen) maxLen = len
+            }
+            return Math.min(Math.max(maxLen * 7 + 16, 50), 260)
+        })
+    }, [previewData])
+
+    const exportStudentExcel = async (data) => {
+        const workbook = new ExcelJS.Workbook()
+        const worksheet = workbook.addWorksheet(data.title)
+        const colCount = data.columns.length
+
+        // Headers
+        data.headers.forEach(line => worksheet.addRow([line]))
+        worksheet.addRow([])
+
+        // Column headers
+        const headerRowStart = worksheet.rowCount + 1
+        worksheet.addRow(data.columns)
+
+        // Data rows
+        data.rows.forEach(row => worksheet.addRow(row))
+        if (data.totalRow) worksheet.addRow(data.totalRow)
+
+        // Merge title rows
+        data.headers.forEach((_, i) => worksheet.mergeCells(i + 1, 1, i + 1, colCount))
+
+        // Auto column widths
+        data.columns.forEach((col, i) => {
+            let maxLen = String(col ?? '').length
+            data.rows.forEach(r => {
+                const len = String(r[i] ?? '').length
+                if (len > maxLen) maxLen = len
+            })
+            if (data.totalRow) {
+                const len = String(data.totalRow[i] ?? '').length
+                if (len > maxLen) maxLen = len
+            }
+            worksheet.getColumn(i + 1).width = Math.min(Math.max(maxLen + 2, 4), 35)
+        })
+
+        // Styling
+        worksheet.eachRow((row, rowNumber) => {
+            row.eachCell(cell => {
+                cell.border = {
+                    top: { style: 'thin' }, left: { style: 'thin' },
+                    bottom: { style: 'thin' }, right: { style: 'thin' }
+                }
+                if (rowNumber === 1) {
+                    cell.font = { name: 'Calibri', size: 14, bold: true }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' }
+                } else if (rowNumber === headerRowStart) {
+                    cell.font = { name: 'Calibri', size: 11, bold: true }
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+                } else if (rowNumber === worksheet.rowCount && data.totalRow) {
+                    cell.font = { name: 'Calibri', size: 11, bold: true }
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }
+                } else {
+                    cell.font = { name: 'Calibri', size: 11 }
+                    if (typeof cell.value === 'number') {
+                        cell.alignment = { vertical: 'middle', horizontal: 'right' }
+                    } else {
+                        cell.alignment = { vertical: 'middle', horizontal: 'left' }
+                    }
+                }
+            })
+        })
+
+        const buffer = await workbook.xlsx.writeBuffer()
+        saveAs(new Blob([buffer]), `${data.fileName}.xlsx`)
     }
 
     return (
@@ -436,11 +544,12 @@ const AllStudents = () => {
                     className="w-28"
                 />
 
+
                 <button
-                    onClick={exportToCSV}
+                    onClick={prepareStudentReport}
                     className="bg-[#6b0f14] text-white px-6 py-2 rounded hover:bg-[#4f0a0f]"
                 >
-                    Export CSV
+                    Preview & Export Report
                 </button>
 
                 <button
@@ -549,6 +658,102 @@ const AllStudents = () => {
                     >
                         Next
                     </button>
+                </div>
+            )}
+
+            {/* Student Report Preview Modal */}
+            {showPreviewModal && previewData && (
+                <div className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4 print-modal-overlay">
+                    <style>
+                        {`
+                            @media print {
+                                @page { size: landscape; }
+                                body * { visibility: hidden !important; }
+                                .print-modal-overlay,
+                                .print-modal-overlay * { visibility: visible !important; }
+                                .print-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white !important; padding: 0 !important; }
+                                .print-modal-container { box-shadow: none !important; border: none !important; max-height: none !important; overflow: visible !important; }
+                                .print-hide { display: none !important; }
+                                .print-report-area { overflow: visible !important; padding: 20px !important; }
+                            }
+                        `}
+                    </style>
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden print-modal-container">
+                        {/* Action Bar */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 md:p-6 border-b bg-gray-50 print-hide">
+                            <h2 className="text-xl font-bold text-gray-800">Preview: {previewData.title}</h2>
+                            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                <button onClick={() => setShowPreviewModal(false)} className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium whitespace-nowrap text-sm md:text-base">Close</button>
+                                <button onClick={() => window.print()} className="flex-1 md:flex-none px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 font-medium whitespace-nowrap text-sm md:text-base">Export PDF</button>
+                                <button onClick={() => exportStudentExcel(previewData)} className="flex-1 md:flex-none px-4 py-2 bg-[#6b0f14] text-white rounded-lg hover:bg-[#4f0a0f] font-medium whitespace-nowrap text-sm md:text-base">Export Excel</button>
+                            </div>
+                        </div>
+
+                        {/* Printable Content */}
+                        <div className="flex-1 overflow-auto p-8 bg-white print-report-area">
+                            <div className="mb-6 font-bold text-lg leading-snug">
+                                {previewData.headers.map((line, i) => (
+                                    <div key={i}>
+                                        <input
+                                            type="text"
+                                            value={line}
+                                            onChange={(e) => handlePreviewHeaderEdit(i, e.target.value)}
+                                            className="w-full outline-none bg-transparent font-bold text-lg"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="border-collapse border border-gray-400 text-sm w-full table-fixed">
+                                    <colgroup>
+                                        {previewColumnWidths.map((w, i) => (
+                                            <col key={i} style={{ width: `${w}px` }} />
+                                        ))}
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            {previewData.columns.map((col, i) => (
+                                                <th key={i} className="border border-gray-400 p-1 font-bold text-left break-words">{col}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {previewData.rows.map((row, rIdx) => (
+                                            <tr key={rIdx}>
+                                                {row.map((cell, cIdx) => (
+                                                    <td key={cIdx} className="border border-gray-400 p-0">
+                                                        <input
+                                                            type="text"
+                                                            value={cell ?? ''}
+                                                            onChange={(e) => handlePreviewCellEdit(rIdx, cIdx, e.target.value)}
+                                                            title={String(cell ?? '')}
+                                                            className="w-full h-full p-1 outline-none bg-transparent"
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                        {previewData.totalRow && (
+                                            <tr className="font-bold bg-gray-50">
+                                                {previewData.totalRow.map((cell, cIdx) => (
+                                                    <td key={cIdx} className="border border-gray-400 p-0">
+                                                        <input
+                                                            type="text"
+                                                            value={cell ?? ''}
+                                                            onChange={(e) => handlePreviewTotalEdit(cIdx, e.target.value)}
+                                                            title={String(cell ?? '')}
+                                                            className="w-full h-full p-1 outline-none bg-transparent font-bold"
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
