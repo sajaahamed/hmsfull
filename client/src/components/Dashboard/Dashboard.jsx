@@ -20,26 +20,27 @@ const Dashboard = () => {
         } else {
             setUser(userInfo);
 
-            if (getRoleNames(userInfo).length === 0) {
-                const token = localStorage.getItem('login');
+            const token = localStorage.getItem('login');
 
-                axios.get(`${API_BASE_URL}/auth/get-currentuser-data`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => {
-                    const currentUser = res.data?.Result;
-                    if (!currentUser) return;
+            axios.get(`${API_BASE_URL}/auth/get-currentuser-data`, {
+                headers: { Authorization: `Bearer ${token}` },
+            }).then(res => {
+                const currentUser = res.data?.Result;
+                if (!currentUser) return;
 
-                    cacheCurrentUser(currentUser);
-                    setUser(prev => ({
-                        ...prev,
-                        username: currentUser.username || prev?.username,
-                        email: currentUser.email || prev?.email,
-                        roles: currentUser.roles || prev?.roles || [],
-                    }));
-                }).catch(error => {
-                    console.warn('Unable to refresh current user data', error);
-                });
-            }
+                const roleNames = getRoleNames(currentUser);
+                cacheCurrentUser(currentUser);
+                setUser(prev => ({
+                    ...prev,
+                    username: currentUser.username || prev?.username,
+                    email: currentUser.email || prev?.email,
+                    profileImage: currentUser.profileImage || prev?.profileImage,
+                    roles: currentUser.roles || prev?.roles || [],
+                    roleNames,
+                }));
+            }).catch(error => {
+                console.warn('Unable to refresh current user data', error);
+            });
         }
     }, [navigate]);
 

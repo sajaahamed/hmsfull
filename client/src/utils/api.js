@@ -5,6 +5,20 @@ const configuredApiBase = (import.meta.env.VITE_APP_API || '').replace(/\/$/, ''
 
 const isLocalHost = (hostname) => ['localhost', '127.0.0.1', '::1'].includes(hostname);
 
+const getSameHostApiBase = () => {
+    if (typeof window === 'undefined') {
+        return configuredApiBase;
+    }
+
+    try {
+        const apiUrl = configuredApiBase ? new URL(configuredApiBase) : null;
+        const port = apiUrl?.port || DEFAULT_API_PORT;
+        return `${window.location.protocol}//${window.location.hostname}:${port}`;
+    } catch {
+        return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_API_PORT}`;
+    }
+};
+
 const getRuntimeApiBase = () => {
     if (typeof window === 'undefined') {
         return configuredApiBase;
@@ -20,7 +34,7 @@ const getRuntimeApiBase = () => {
         const apiUrl = new URL(configuredApiBase);
 
         if (isLocalHost(apiUrl.hostname) && !isLocalHost(pageHost)) {
-            apiUrl.hostname = pageHost;
+            return `${window.location.origin}/api`;
         }
 
         return apiUrl.toString().replace(/\/$/, '');
@@ -30,6 +44,7 @@ const getRuntimeApiBase = () => {
 };
 
 export const API_BASE_URL = getRuntimeApiBase();
+const SAME_HOST_API_BASE_URL = getSameHostApiBase();
 
 export const resolveApiUrl = (url = '') => {
     if (!url) return url;
@@ -42,8 +57,7 @@ export const resolveApiUrl = (url = '') => {
         const parsed = new URL(url);
 
         if (isLocalHost(parsed.hostname) && typeof window !== 'undefined' && !isLocalHost(window.location.hostname)) {
-            parsed.hostname = window.location.hostname;
-            return parsed.toString();
+            return `${API_BASE_URL}${parsed.pathname}${parsed.search}${parsed.hash}`;
         }
     } catch {
         // Relative URLs are handled below.
@@ -63,3 +77,24 @@ axios.interceptors.request.use((config) => {
 
     return config;
 });
+
+axios.interceptors.response.use(
+    response => response,
+    error => {
+        const originalConfig = error.config;
+        const canRetryWithSameHost = originalConfig
+            && !originalConfig._sameHostApiFallbackTried
+            && API_BASE_URL !== SAME_HOST_API_BASE_URL
+            && typeof originalConfig.url === 'string'
+            && originalConfig.url.startsWith(API_BASE_URL);
+
+        if (!canRetryWithSameHost) {
+            return Promise.reject(error);
+        }
+
+        originalConfig._sameHostApiFallbackTried = true;
+        originalConfig.url = `${SAME_HOST_API_BASE_URL}${originalConfig.url.slice(API_BASE_URL.length)}`;
+
+        return axios(originalConfig);
+    }
+);

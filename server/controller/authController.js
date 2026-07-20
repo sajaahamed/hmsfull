@@ -462,27 +462,23 @@ const authController = {
 
     getmebyemail: async (req, res) => {
         try {
-            const authHeader = req.headers['authorization'];
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                return res.json({ Error: "Unauthorized: Missing or invalid token" });
+            const user = await User.findById(req.user.id).select('-password').populate('roles');
+            if (!user) {
+                return res.status(404).json({ Error: "User not found" });
             }
 
-            const token = authHeader.split(' ')[1];
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const email = decoded.user.email;
-
-            const user = await User.findOne({ email }).select('-password').populate('roles');
             let assignedHostels = [];
-            if (user && user.roles && user.roles.some(r => r.name === 'warden')) {
+            if (user.roles && user.roles.some(r => r.name === 'warden')) {
                 const { getActiveWardenAssignments } = require('../utils/wardenAssignments');
                 const assignments = await getActiveWardenAssignments(user._id);
                 assignedHostels = assignments.map(a => a.hostelId).filter(Boolean);
             }
-            return res.json({ Result: user, Hostels: assignedHostels })
+            return res.json({ Result: user, Hostels: assignedHostels });
 
         }
         catch (err) {
-            console.log(err)
+            console.error('get-currentuser-data error:', err);
+            return res.status(500).json({ Error: "Unable to load current user" });
         }
     },
 

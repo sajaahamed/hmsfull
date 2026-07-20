@@ -26,7 +26,8 @@ export function getRoleNames(userInfoOrRoles) {
     }
 
     if (Array.isArray(userInfoOrRoles.roleNames)) {
-        return userInfoOrRoles.roleNames;
+        const roleNames = getRoleNamesFromRoles(userInfoOrRoles.roleNames);
+        if (roleNames.length > 0) return roleNames;
     }
 
     return getRoleNamesFromRoles(userInfoOrRoles.roles);
@@ -48,11 +49,13 @@ export function getCachedUserInfo() {
         if (!cached) return null;
 
         const user = JSON.parse(cached);
+        const roles = user?.roles || [];
+        const roleNames = getRoleNames(user);
         return {
             username: user?.username || null,
             email: user?.email || null,
-            roles: user?.roles || [],
-            roleNames: getRoleNamesFromRoles(user?.roles || []),
+            roles,
+            roleNames,
         };
     } catch {
         return null;
