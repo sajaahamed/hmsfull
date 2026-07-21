@@ -476,7 +476,10 @@ const authController = {
         try {
             const user = await User.findById(req.user.id).select('-password').populate('roles');
             if (!user) {
-                return res.status(404).json({ Error: "User not found" });
+                return res.status(401).json({
+                    code: 'AUTH_USER_NOT_FOUND',
+                    Error: "The account for this authentication token no longer exists"
+                });
             }
 
             let populatedRoles = user.roles || [];

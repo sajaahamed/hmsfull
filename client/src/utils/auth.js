@@ -2,6 +2,15 @@ import { jwtDecode } from 'jwt-decode';
 
 const KNOWN_ROLE_NAMES = new Set(['student', 'warden', 'admin', 'director']);
 const CURRENT_USER_KEY = 'currentUser';
+const AUTH_STORAGE_KEYS = ['login', 'loginE', CURRENT_USER_KEY, 'dashmenuID', 'profileImage'];
+
+export function clearAuthentication() {
+    try {
+        AUTH_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    } catch {
+        // Ignore storage failures.
+    }
+}
 
 export function getRoleNamesFromRoles(roles) {
     const roleList = Array.isArray(roles) ? roles : [roles].filter(Boolean);
@@ -71,6 +80,15 @@ export function getUserInfoFromToken() {
         const decoded = jwtDecode(token);
         // console.log("DECODED TOKEN:", decoded);
 
+        const userId = decoded.id || decoded._id || decoded.user?._id || decoded.user?.id;
+        const expiresAt = Number(decoded.exp || 0);
+        const isExpired = expiresAt > 0 && expiresAt * 1000 <= Date.now();
+
+        if (!userId || isExpired) {
+            clearAuthentication();
+            return null;
+        }
+
         const username = decoded.username || decoded.user?.username || null;
         const email = decoded.email || decoded.user?.email || null;
         const roles = decoded.roles || decoded.role || decoded.user?.roles || [];
@@ -89,6 +107,7 @@ export function getUserInfoFromToken() {
         }
 
         return {
+            id: String(userId),
             username: username || cachedUser?.username,
             email: email || cachedUser?.email,
             roles: roleNames.length > 0 ? roles : cachedUser?.roles || roles,
@@ -96,6 +115,7 @@ export function getUserInfoFromToken() {
         };
     } catch (error) {
         console.error('Invalid token', error);
+        clearAuthentication();
         return null;
     }
 }

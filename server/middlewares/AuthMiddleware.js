@@ -14,7 +14,10 @@ const authMiddleware = (req, res, next) => {
         const userId = decoded.id || decoded._id || decoded.user?._id || decoded.user?.id;
 
         if (!userId) {
-            return res.status(400).json({ message: 'Invalid token payload: missing user ID' });
+            return res.status(401).json({
+                code: 'AUTH_TOKEN_INVALID',
+                message: 'Invalid token payload: missing user ID'
+            });
         }
 
         req.user = { id: userId };
@@ -22,7 +25,11 @@ const authMiddleware = (req, res, next) => {
 
     } catch (error) {
         console.error('JWT Error:', error.message);
-        res.status(400).json({ message: 'Invalid token.' });
+        const expired = error.name === 'TokenExpiredError';
+        res.status(401).json({
+            code: expired ? 'AUTH_TOKEN_EXPIRED' : 'AUTH_TOKEN_INVALID',
+            message: expired ? 'Authentication token has expired.' : 'Invalid authentication token.'
+        });
     }
 };
 

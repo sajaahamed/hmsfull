@@ -3,7 +3,7 @@ import { getRoleNames, getUserInfoFromToken } from '../../utils/auth';
 
 // Function to check if user is authenticated
 const isAuthenticated = () => {
-    return !!localStorage.getItem('login'); // Check for token in localStorage
+    return !!getUserInfoFromToken();
 };
 
 const hasRoleAccess = (allowedRoles) => {
@@ -14,14 +14,11 @@ const hasRoleAccess = (allowedRoles) => {
 
 const PrivateRoute = ({ element, allowedRoles }) => {
     if (!isAuthenticated()) {
-        // Force page reload for /
-        window.location.href = "/";
-        return null;
+        return <Navigate to="/" replace />;
     }
 
     if (!hasRoleAccess(allowedRoles)) {
-        window.location.href = "/Dashboard/Home";
-        return null;
+        return <Navigate to="/Dashboard/Home" replace />;
     }
 
     return element;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { cacheCurrentUser, getRoleNames, getUserInfoFromToken } from '../../utils/auth';
+import { cacheCurrentUser, clearAuthentication, getRoleNames, getUserInfoFromToken } from '../../utils/auth';
 import { API_BASE_URL } from '../../utils/api';
 import DashSide from './DashSide';
 import DashNav from './DashNav';
@@ -15,8 +15,8 @@ const Dashboard = () => {
     useEffect(() => {
         const userInfo = getUserInfoFromToken();
         if (!userInfo) {
-            localStorage.clear();
-            navigate('/');
+            clearAuthentication();
+            navigate('/', { replace: true });
         } else {
             setUser(userInfo);
 
@@ -39,7 +39,21 @@ const Dashboard = () => {
                     roleNames,
                 }));
             }).catch(error => {
-                console.warn('Unable to refresh current user data', error);
+                const status = error.response?.status;
+                const code = error.response?.data?.code;
+                const authenticationFailed = status === 401
+                    || status === 404
+                    || (status === 400 && error.response?.data?.message?.toLowerCase().includes('token'))
+                    || code === 'AUTH_USER_NOT_FOUND';
+
+                if (authenticationFailed) {
+                    clearAuthentication();
+                    setUser(null);
+                    navigate('/', { replace: true });
+                    return;
+                }
+
+                console.warn('Unable to refresh current user data', error.response?.data || error.message);
             });
         }
     }, [navigate]);

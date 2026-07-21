@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import DefaultInput from '../../components/Form/DefaultInput';
 import DefaultBtn from '../../components/Buttons/DefaultBtn';
+import { clearAuthentication, getUserInfoFromToken } from '../../utils/auth';
 
 import uopLogo from '../../assets/uoplogo.png';
 import authBg from '../../assets/81.jpg';
@@ -22,8 +23,7 @@ const SignIn = () => {
 
     // Auto-redirect if already logged in
     React.useEffect(() => {
-        const token = localStorage.getItem('login');
-        if (token) {
+        if (getUserInfoFromToken()) {
             navigate('/Dashboard/Home');
         }
     }, [navigate]);
@@ -61,7 +61,7 @@ const SignIn = () => {
 
             if (res.data.Status === 'Success') {
                 alert(res.data.Message);
-                localStorage.removeItem('currentUser');
+                clearAuthentication();
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
                 
@@ -72,8 +72,9 @@ const SignIn = () => {
                 setError(res.data.Error || 'Sign-in failed');
             }
         } catch (err) {
-            console.error(err);
-            setError('An unexpected error occurred. Please try again.');
+            const serverMessage = err.response?.data?.Error || err.response?.data?.message;
+            console.error('Sign-in request failed:', serverMessage || err.message);
+            setError(serverMessage || 'An unexpected error occurred. Please try again.');
         } finally {
             setLoading(false);
         }
