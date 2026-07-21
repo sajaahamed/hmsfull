@@ -479,6 +479,19 @@ const authController = {
                 return res.status(404).json({ Error: "User not found" });
             }
 
+            let populatedRoles = user.roles || [];
+            if (populatedRoles.length > 0 && !populatedRoles[0].name) {
+                const Role = require('../model/Role');
+                const roleIds = populatedRoles.map(r => String(r._id || r));
+                const allRoles = await Role.find({});
+                populatedRoles = populatedRoles.map(r => {
+                    const idStr = String(r._id || r);
+                    const found = allRoles.find(ar => String(ar._id) === idStr);
+                    return found || r;
+                });
+                user.roles = populatedRoles;
+            }
+
             let assignedHostels = [];
             if (user.roles && user.roles.some(r => r.name === 'warden')) {
                 const { getActiveWardenAssignments } = require('../utils/wardenAssignments');
