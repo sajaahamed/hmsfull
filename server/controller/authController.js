@@ -474,39 +474,58 @@ const authController = {
 
     getmebyemail: async (req, res) => {
         try {
-            const user = await User.findById(req.user.id).select('-password').populate('roles');
-            if (!user) {
+            const userId = req.user?.id;
+
+            if (!userId) {
                 return res.status(401).json({
-                    code: 'AUTH_USER_NOT_FOUND',
-                    Error: "The account for this authentication token no longer exists"
+                    Status: 'Fail',
+                    Error: 'Unauthorized: User ID was not found'
                 });
             }
 
-            let populatedRoles = user.roles || [];
-            if (populatedRoles.length > 0 && !populatedRoles[0].name) {
-                const Role = require('../model/Role');
-                const roleIds = populatedRoles.map(r => String(r._id || r));
-                const allRoles = await Role.find({});
-                populatedRoles = populatedRoles.map(r => {
-                    const idStr = String(r._id || r);
-                    const found = allRoles.find(ar => String(ar._id) === idStr);
-                    return found || r;
+            const user = await User.findById(userId)
+                .select('-password')
+                .populate('roles');
+
+            if (!user) {
+                return res.status(404).json({
+                    Status: 'Fail',
+                    Error: 'User not found'
                 });
-                user.roles = populatedRoles;
             }
 
             let assignedHostels = [];
-            if (user.roles && user.roles.some(r => r.name === 'warden')) {
-                const { getActiveWardenAssignments } = require('../utils/wardenAssignments');
-                const assignments = await getActiveWardenAssignments(user._id);
-                assignedHostels = assignments.map(a => a.hostelId).filter(Boolean);
-            }
-            return res.json({ Result: user, Hostels: assignedHostels });
 
-        }
-        catch (err) {
-            console.error('get-currentuser-data error:', err);
-            return res.status(500).json({ Error: "Unable to load current user" });
+            const roleNames = Array.isArray(user.roles)
+                ? user.roles
+                    .map(role => String(role?.name || '').trim().toLowerCase())
+                    .filter(Boolean)
+                : [];
+
+            if (roleNames.includes('warden')) {
+                const {
+                    getActiveWardenAssignments
+                } = require('../utils/wardenAssignments');
+
+                const assignments = await getActiveWardenAssignments(user._id);
+
+                assignedHostels = assignments
+                    .map(assignment => assignment.hostelId)
+                    .filter(Boolean);
+            }
+
+            return res.status(200).json({
+                Status: 'Success',
+                Result: user,
+                Hostels: assignedHostels
+            });
+        } catch (err) {
+            console.error('getmebyemail error:', err);
+
+            return res.status(500).json({
+                Status: 'Fail',
+                Error: 'Internal Server Error while getting current user'
+            });
         }
     },
 
