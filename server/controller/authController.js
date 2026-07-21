@@ -258,7 +258,19 @@ const authController = {
                 }
             }
 
-            const roleNames = (checkuser.roles || []).map(role => String(role.name || '').toLowerCase());
+            let populatedRoles = checkuser.roles || [];
+            if (populatedRoles.length > 0 && !populatedRoles[0].name) {
+                const Role = require('../model/Role');
+                const roleIds = populatedRoles.map(r => String(r._id || r));
+                const allRoles = await Role.find({});
+                populatedRoles = populatedRoles.map(r => {
+                    const idStr = String(r._id || r);
+                    const found = allRoles.find(ar => String(ar._id) === idStr);
+                    return found || r;
+                });
+                checkuser.roles = populatedRoles;
+            }
+            const roleNames = populatedRoles.map(role => String(role.name || '').toLowerCase());
             const isStudentAccount = roleNames.includes('student');
 
             if (isStudentAccount && !looksLikeStudentLogin) {
