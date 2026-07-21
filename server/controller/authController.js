@@ -483,9 +483,15 @@ const authController = {
                 });
             }
 
-            const user = await User.findById(userId)
+            let user = await User.findById(userId)
                 .select('-password')
                 .populate('roles');
+
+            if (!user && req.user?.email) {
+                user = await User.findOne({ email: req.user.email })
+                    .select('-password')
+                    .populate('roles');
+            }
 
             if (!user) {
                 return res.status(404).json({

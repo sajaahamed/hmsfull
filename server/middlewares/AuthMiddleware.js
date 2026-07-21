@@ -20,7 +20,11 @@ const authMiddleware = (req, res, next) => {
             });
         }
 
-        req.user = { id: userId };
+        req.user = {
+            id: userId,
+            email: decoded.email || decoded.user?.email || null,
+            username: decoded.username || decoded.user?.username || null
+        };
         next();
 
     } catch (error) {
