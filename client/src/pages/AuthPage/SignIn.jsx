@@ -51,7 +51,7 @@ const SignIn = () => {
 
         try {
             const res = await axios.post(
-                '/api/auth/signin',
+                '/auth/signin',
                 {
                     ...signInData,
                     loginMode,

@@ -16,9 +16,13 @@ export default defineConfig({
     react()  
   ],
   server: {
+    // Listen on the LAN as well as localhost. API requests are still proxied
+    // from this machine to the local Express server below.
+    host: '0.0.0.0',
     proxy: apiProxy,
   },
   preview: {
+    host: '0.0.0.0',
     proxy: apiProxy,
   },
 })
