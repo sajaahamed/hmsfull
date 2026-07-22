@@ -10,14 +10,18 @@ import DashFooter from './DashFooter';
 const Dashboard = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
+    const [authChecked, setAuthChecked] = useState(false);
     const [sideOpen, setSideOpen] = useState(false);
 
     useEffect(() => {
+        let active = true;
         const userInfo = getUserInfoFromToken();
         if (!userInfo) {
             clearAuthentication();
             navigate('/', { replace: true });
         } else {
+            // Keep the dashboard children unmounted until the server confirms
+            // that this token still belongs to a current database user.
             setUser(userInfo);
 
             const token = localStorage.getItem('login');
@@ -25,8 +29,12 @@ const Dashboard = () => {
             axios.get(`${API_BASE_URL}/auth/get-currentuser-data`, {
                 headers: { Authorization: `Bearer ${token}` },
             }).then(res => {
+                if (!active) return;
                 const currentUser = res.data?.Result;
-                if (!currentUser) return;
+                if (!currentUser) {
+                    setAuthChecked(true);
+                    return;
+                }
 
                 const roleNames = getRoleNames(currentUser);
                 cacheCurrentUser(currentUser);
@@ -38,7 +46,9 @@ const Dashboard = () => {
                     roles: currentUser.roles || prev?.roles || [],
                     roleNames,
                 }));
+                setAuthChecked(true);
             }).catch(error => {
+                if (!active) return;
                 const status = error.response?.status;
                 const code = error.response?.data?.code;
                 const authenticationFailed = status === 401
@@ -54,13 +64,18 @@ const Dashboard = () => {
                 }
 
                 console.warn('Unable to refresh current user data', error.response?.data || error.message);
+                setAuthChecked(true);
             });
         }
+
+        return () => {
+            active = false;
+        };
     }, [navigate]);
 
     const toggleSide = () => setSideOpen(prev => !prev);
 
-    if (!user) {
+    if (!authChecked || !user) {
         return (
             <div className="min-h-screen flex items-center justify-center text-gray-600">
                 Loading...

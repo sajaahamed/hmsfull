@@ -9,15 +9,25 @@ const HostelData = () => {
     const token = localStorage.getItem('login');
 
     useEffect(() => {
+        if (!token) {
+            setAllHostels([]);
+            return;
+        }
+
         axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
             headers: {
                 Authorization: `Bearer ${token}`,
             }
         })
             .then(res => {
-                setAllHostels(res.data.Result);
+                setAllHostels(Array.isArray(res.data?.Result) ? res.data.Result : []);
             })
-            .catch(err => console.error("Failed to fetch hostels:", err));
+            .catch(err => {
+                setAllHostels([]);
+                if (err.response?.status !== 401) {
+                    console.error("Failed to fetch hostels:", err);
+                }
+            });
     }, [token]);
 
     const hostalData = [

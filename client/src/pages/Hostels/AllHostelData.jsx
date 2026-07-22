@@ -6,8 +6,9 @@ import { Link } from 'react-router-dom';
 const AllHostelData = () => {
     const [allhostels, setAllHostels] = useState([]);
     const token = localStorage.getItem('login');
+    const hostels = Array.isArray(allhostels) ? allhostels : [];
 
-    const maleHostelCount = allhostels.filter(h => h.gender === 'Male').length;
+    const maleHostelCount = hostels.filter(h => h.gender === 'Male').length;
 
     // Delete a hostel and refresh the list
     const handleDeleteHostel = async (hostelId) => {
@@ -20,28 +21,38 @@ const AllHostelData = () => {
             const res = await axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setAllHostels(res.data.Result);
+            setAllHostels(Array.isArray(res.data?.Result) ? res.data.Result : []);
         } catch (err) {
             console.error('Failed to delete hostel:', err);
         }
     };
-    const femaleHostelCount = allhostels.filter(h => h.gender === 'Female').length;
-    const revHostelCount = allhostels.filter(h => h.gender === 'REV' || h.gender === 'Rev').length;
+    const femaleHostelCount = hostels.filter(h => h.gender === 'Female').length;
+    const revHostelCount = hostels.filter(h => h.gender === 'REV' || h.gender === 'Rev').length;
 
-    const totalCapacity = allhostels.reduce((sum, h) => sum + (h.totalCapacity || 0), 0);
-    const totalAssigned = allhostels.reduce((sum, h) => sum + (h.assignedStudents || 0), 0);
+    const totalCapacity = hostels.reduce((sum, h) => sum + (h.totalCapacity || 0), 0);
+    const totalAssigned = hostels.reduce((sum, h) => sum + (h.assignedStudents || 0), 0);
     const overallOccupancy = totalCapacity > 0 ? Math.min((totalAssigned / totalCapacity) * 100, 100).toFixed(1) : 0;
 
     useEffect(() => {
+        if (!token) {
+            setAllHostels([]);
+            return;
+        }
+
         axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
             headers: {
                 Authorization: `Bearer ${token}`,
             }
         })
             .then(res => {
-                setAllHostels(res.data.Result);
+                setAllHostels(Array.isArray(res.data?.Result) ? res.data.Result : []);
             })
-            .catch(err => console.error("Failed to fetch hostels:", err));
+            .catch(err => {
+                setAllHostels([]);
+                if (err.response?.status !== 401) {
+                    console.error("Failed to fetch hostels:", err);
+                }
+            });
     }, [token]);
 
     const hostelStats = [
@@ -131,8 +142,8 @@ const AllHostelData = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {
-                            allhostels.length > 0 ? (
-                                allhostels.map((data, index) => (
+                            hostels.length > 0 ? (
+                                hostels.map((data, index) => (
                                     <tr key={index} className="hover:bg-[#fefaf0] transition-all duration-150">
                                         <td className="px-3 py-2.5 font-medium text-gray-800 align-top">{index + 1}</td>
                                         <td className="px-3 py-2.5 max-w-[110px] break-words whitespace-normal align-top">{data.hostelID}</td>
