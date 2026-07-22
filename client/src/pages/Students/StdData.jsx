@@ -11,15 +11,25 @@ const StdData = () => {
     const [allstds, setAllStds] = useState([])
 
     useEffect(() => {
+        if (!token) {
+            setAllStds([])
+            return
+        }
+
         axios.get(import.meta.env.VITE_APP_API + '/student/get-all-students-auth', {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         })
             .then(res => {
-                setAllStds(res.data.Result)
+                setAllStds(Array.isArray(res.data?.Result) ? res.data.Result : [])
             })
-            .catch(err => console.log(err))
+            .catch(err => {
+                setAllStds([])
+                if (err.response?.status !== 401) {
+                    console.error('Failed to fetch student statistics:', err)
+                }
+            })
     }, [token])
 
     const maleStudents = allstds.filter(std => std.sex === 'Male')

@@ -12,7 +12,20 @@ const checkPermission = (requiredPermission) => {
                 return res.status(401).json({ message: 'Unauthorized: No user ID found.' });
             }
 
-            const user = await User.findById(userId).populate('roles');
+            let user = await User.findById(userId).populate('roles');
+
+            // Database restores can preserve a user account while assigning it a
+            // new MongoDB _id. The signed token still contains the verified email,
+            // so resolve that current account in the same way as get-currentuser-data.
+            if (!user && req.user?.email) {
+                user = await User.findOne({ email: req.user.email }).populate('roles');
+
+                if (user) {
+                    // Controllers after this middleware must use the current ID,
+                    // not the obsolete ID embedded in the pre-restore token.
+                    req.user.id = user._id.toString();
+                }
+            }
 
             if (!user) {
                 // The route exists, but the bearer token points at a user that no
