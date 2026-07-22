@@ -28,8 +28,12 @@ const mongoose = require('mongoose');
     if (hasAdmin) {
       console.log('User already has admin role:', email);
     } else {
-      user.roles.push(adminRole._id);
-      await user.save();
+      // Use an atomic update because the live application may update this user
+      // between findOne() and save(), causing a Mongoose VersionError.
+      await User.updateOne(
+        { _id: user._id },
+        { $addToSet: { roles: adminRole._id } }
+      );
       console.log('Assigned admin role to user:', email);
     }
 
