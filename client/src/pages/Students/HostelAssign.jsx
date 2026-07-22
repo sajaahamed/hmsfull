@@ -261,8 +261,11 @@ const HostelAssign = () => {
         axios.get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
             headers: { Authorization: `Bearer ${token}` }
         })
-            .then(res => setAllHostels(res.data.Result))
-            .catch(err => console.error("Failed to fetch hostels:", err))
+            .then(res => setAllHostels(Array.isArray(res.data.Result) ? res.data.Result : []))
+            .catch(err => {
+                setAllHostels([])
+                console.error("Failed to fetch hostels:", err)
+            })
     }, [token])
 
     useEffect(() => {
@@ -412,7 +415,7 @@ const HostelAssign = () => {
             return
         }
 
-        const hostelObj = allhostels.find(x => x._id === selectedHostel)
+        const hostelObj = (Array.isArray(allhostels) ? allhostels : []).find(x => x._id === selectedHostel)
         const availableCap = hostelObj ? Number(hostelObj.availableCapacity) || 0 : 0
 
         let finalStudentIds = Array.from(selectedStudents)
@@ -546,13 +549,13 @@ const HostelAssign = () => {
                     name="hostel"
                     value={selectedHostel}
                     onChange={handleHostelChange}
-                    options={allhostels.map(h => ({
+                    options={(Array.isArray(allhostels) ? allhostels : []).map(h => ({
                         label: `${h.name} (${h.gender || '?'}) — ${h.isFull ? 'FULL' : `${h.availableCapacity ?? '?'} available`}`,
                         value: h._id
                     }))}
                 />
                 {selectedHostel && (() => {
-                    const h = allhostels.find(x => x._id === selectedHostel)
+                    const h = (Array.isArray(allhostels) ? allhostels : []).find(x => x._id === selectedHostel)
                     if (!h) return null
                     const pct = Number(h.occupancyPercentage) || 0
                     const barColor = pct >= 100 ? 'bg-red-600' : pct >= 80 ? 'bg-orange-500' : 'bg-[#6b0f14]'

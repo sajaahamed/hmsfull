@@ -66,10 +66,15 @@ const AllStudents = () => {
                 headers: { Authorization: `Bearer ${token}` }
             })
             .then(res => {
-                setAllStds(res.data.Result)
-                setFilteredStudents(res.data.Result)
+                const students = Array.isArray(res.data.Result) ? res.data.Result : []
+                setAllStds(students)
+                setFilteredStudents(students)
             })
-            .catch(err => console.log(err))
+            .catch(err => {
+                setAllStds([])
+                setFilteredStudents([])
+                console.error('Failed to fetch students:', err)
+            })
     }, [token])
 
     useEffect(() => {
@@ -77,8 +82,11 @@ const AllStudents = () => {
             .get(import.meta.env.VITE_APP_API + '/hostel/get-all-hostels', {
                 headers: { Authorization: `Bearer ${token}` }
             })
-            .then(res => setAllHostels(res.data.Result || []))
-            .catch(err => console.error('Failed to fetch hostels:', err))
+            .then(res => setAllHostels(Array.isArray(res.data.Result) ? res.data.Result : []))
+            .catch(err => {
+                setAllHostels([])
+                console.error('Failed to fetch hostels:', err)
+            })
     }, [token])
 
     const hostelOptions = React.useMemo(() => {
@@ -92,7 +100,7 @@ const AllStudents = () => {
     // parent -> Array of sub objects { value, label, type }
     const parentSubMap = React.useMemo(() => {
         const m = new Map()
-        allstds.forEach(s => {
+        ;(Array.isArray(allstds) ? allstds : []).forEach(s => {
             const enrol = s.enrolmentNo || ''
             const main = getMainDept(enrol)
             const parts = enrol.split('/').filter(Boolean)
@@ -223,7 +231,7 @@ const AllStudents = () => {
     useEffect(() => {
         const term = searchTerm.toLowerCase()
 
-        const filtered = allstds.filter(student => {
+        const filtered = (Array.isArray(allstds) ? allstds : []).filter(student => {
             const matchesSearch =
                 student.nic?.toLowerCase().includes(term) ||
                 student.enrolmentNo?.toLowerCase().includes(term)

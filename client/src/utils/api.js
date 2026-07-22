@@ -38,8 +38,10 @@ axios.interceptors.response.use(
             : headers?.Authorization || headers?.authorization;
         const isAuthenticatedRequest = typeof authorization === 'string'
             && authorization.startsWith('Bearer ');
+        const hasStoredSession = typeof window !== 'undefined'
+            && Boolean(window.localStorage.getItem('login'));
 
-        if (code === 'AUTH_USER_NOT_FOUND' || (status === 401 && isAuthenticatedRequest)) {
+        if (code === 'AUTH_USER_NOT_FOUND' || (status === 401 && (isAuthenticatedRequest || hasStoredSession))) {
             clearAuthentication();
 
             // A hard navigation also cancels any sibling requests started by the
