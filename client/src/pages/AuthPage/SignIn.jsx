@@ -51,7 +51,7 @@ const SignIn = () => {
 
         try {
             const res = await axios.post(
-                `${import.meta.env.VITE_APP_API}/auth/signin`,
+                '/api/auth/signin',
                 {
                     ...signInData,
                     loginMode,
