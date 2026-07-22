@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearAuthentication } from './auth';
 
 const configuredApiBase = (import.meta.env.VITE_APP_API || '/api').replace(/\/$/, '');
 
@@ -25,3 +26,29 @@ axios.interceptors.request.use((config) => {
 
     return config;
 });
+
+axios.interceptors.response.use(
+    response => response,
+    error => {
+        const status = error.response?.status;
+        const code = error.response?.data?.code;
+        const headers = error.config?.headers;
+        const authorization = typeof headers?.get === 'function'
+            ? headers.get('Authorization')
+            : headers?.Authorization || headers?.authorization;
+        const isAuthenticatedRequest = typeof authorization === 'string'
+            && authorization.startsWith('Bearer ');
+
+        if (code === 'AUTH_USER_NOT_FOUND' || (status === 401 && isAuthenticatedRequest)) {
+            clearAuthentication();
+
+            // A hard navigation also cancels any sibling requests started by the
+            // now-invalid dashboard, preventing a cascade of misleading errors.
+            if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+                window.location.replace('/');
+            }
+        }
+
+        return Promise.reject(error);
+    }
+);

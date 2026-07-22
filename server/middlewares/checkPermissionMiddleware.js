@@ -15,7 +15,14 @@ const checkPermission = (requiredPermission) => {
             const user = await User.findById(userId).populate('roles');
 
             if (!user) {
-                return res.status(404).json({ message: 'User not found.' });
+                // The route exists, but the bearer token points at a user that no
+                // longer exists (for example after a database restore). Treat this
+                // as an invalid session so clients can sign the user out instead of
+                // reporting every protected API endpoint as missing.
+                return res.status(401).json({
+                    code: 'AUTH_USER_NOT_FOUND',
+                    message: 'Authentication session is no longer valid. Please sign in again.'
+                });
             }
 
             const allPermissions = user.roles.flatMap(role => role.permissions);

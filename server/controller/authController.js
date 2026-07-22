@@ -494,9 +494,10 @@ const authController = {
             }
 
             if (!user) {
-                return res.status(404).json({
+                return res.status(401).json({
                     Status: 'Fail',
-                    Error: 'User not found'
+                    code: 'AUTH_USER_NOT_FOUND',
+                    Error: 'Authentication session is no longer valid. Please sign in again.'
                 });
             }
 
