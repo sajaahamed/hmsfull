@@ -64,10 +64,10 @@ const SignIn = () => {
                 clearAuthentication();
                 localStorage.setItem('login', res.data.Token);
                 localStorage.setItem('dashmenuID', 1);
-                
-                // Use React Router's navigate for smooth client-side transition
-                // (window.location.href causes a full reload which can lose state)
-                navigate('/Dashboard/Home');
+
+                // Reload from a clean authenticated state so components cannot
+                // reuse a token value captured before sign-in.
+                window.location.replace('/Dashboard/Home');
             } else {
                 setError(res.data.Error || 'Sign-in failed');
             }

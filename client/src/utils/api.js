@@ -24,6 +24,22 @@ axios.interceptors.request.use((config) => {
         config.url = resolveApiUrl(config.url);
     }
 
+    // Read the token at request time instead of relying on a value captured
+    // during an earlier render. This also replaces accidental `Bearer null`
+    // headers produced by components that mounted before authentication.
+    if (typeof window !== 'undefined') {
+        const token = window.localStorage.getItem('login');
+
+        if (token) {
+            if (typeof config.headers?.set === 'function') {
+                config.headers.set('Authorization', `Bearer ${token}`);
+            } else {
+                config.headers = config.headers || {};
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+        }
+    }
+
     return config;
 });
 
