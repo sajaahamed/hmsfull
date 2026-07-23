@@ -2,6 +2,7 @@ const axios = require('axios');
 const XLSX = require('xlsx');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const Student = require('../model/Student');
 const Allocation = require('../model/Allocation');
 const Payment = require('../model/Payment');
@@ -35,6 +36,30 @@ function normalizeGender(value) {
     if (raw === 'f' || raw === 'female') return 'Female';
     if (raw === 'rev' || raw === 'reverend') return 'REV';
     return null;
+}
+
+function getCompatibleIdFilter(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return null;
+
+    const candidates = [normalizedId];
+    if (mongoose.Types.ObjectId.isValid(normalizedId)) {
+        candidates.unshift(new mongoose.Types.ObjectId(normalizedId));
+    }
+
+    return {
+        _id: candidates.length === 1
+            ? candidates[0]
+            : { $in: candidates }
+    };
+}
+
+async function findStudentByIdCompatible(id) {
+    const filter = getCompatibleIdFilter(id);
+    if (!filter) return null;
+
+    // Native lookup avoids Mongoose casting restored string IDs to ObjectId.
+    return Student.collection.findOne(filter);
 }
 
 // Geocoding function using OpenCage API
@@ -944,14 +969,25 @@ const StudentController = {
 
     getStudentById: async (req, res) => {
         try {
-            const { id } = req.params
+            const { id } = req.params;
+            const findStudent = await findStudentByIdCompatible(id);
 
-            const findStudent = await Student.findById(id)
+            if (!findStudent) {
+                return res.status(404).json({
+                    Status: 'Fail',
+                    Error: 'Student not found',
+                    Result: null
+                });
+            }
 
-            res.json({ Result: findStudent })
+            return res.json({ Status: 'Success', Result: findStudent });
         }
         catch (err) {
-            console.log(err)
+            console.error('getStudentById error:', err);
+            return res.status(500).json({
+                Status: 'Fail',
+                Error: 'Failed to load student data'
+            });
         }
     },
 
@@ -1000,42 +1036,83 @@ const StudentController = {
 
             let editorName = 'Admin';
             if (req.user && req.user.id) {
-                const adminUser = await User.findById(req.user.id);
+                let adminUser = await User.findById(req.user.id);
+                if (!adminUser && req.user.email) {
+                    adminUser = await User.findOne({ email: req.user.email });
+                }
                 if (adminUser) {
                     editorName = adminUser.username || adminUser.email || 'Admin';
                 }
             }
 
-            const updatedStudent = await Student.findByIdAndUpdate(
+            const studentUpdate = {
+                name,
+                alDistrict,
+                sex: normalizeGender(gender || sex),
+                address1,
+                address2,
+                address3,
+                fullAddress,
+                intake,
+                dateOfEnrolment,
+                distance: computedDistance,
+                transitDurationSec: computedDurationSec,
+                transitDurationText: computedDurationText,
+                distanceSource: computedDistSource,
+                lastEditedBy: editorName,
+                lastEditedAt: new Date(),
+            };
+
+            let updatedStudent = await Student.findByIdAndUpdate(
                 id,
-                {
-                    name,
-                    alDistrict,
-                    sex: normalizeGender(gender || sex),
-                    address1,
-                    address2,
-                    address3,
-                    fullAddress,
-                    intake,
-                    dateOfEnrolment,
-                    distance: computedDistance,
-                    transitDurationSec: computedDurationSec,
-                    transitDurationText: computedDurationText,
-                    distanceSource: computedDistSource,
-                    lastEditedBy: editorName,
-                    lastEditedAt: new Date(),
-                },
+                studentUpdate,
                 { new: true }
             );
 
             if (!updatedStudent) {
-                return res.json({ message: 'Student not found' });
+                const filter = getCompatibleIdFilter(id);
+                if (filter) {
+                    const nativeUpdate = Object.fromEntries(
+                        Object.entries(studentUpdate)
+                            .filter(([, value]) => value !== undefined)
+                    );
+
+                    if (nativeUpdate.dateOfEnrolment) {
+                        const parsedDate = new Date(nativeUpdate.dateOfEnrolment);
+                        if (!Number.isNaN(parsedDate.getTime())) {
+                            nativeUpdate.dateOfEnrolment = parsedDate;
+                        }
+                    }
+
+                    const result = await Student.collection.updateOne(
+                        filter,
+                        { $set: nativeUpdate }
+                    );
+
+                    if (result.matchedCount === 1) {
+                        updatedStudent = await findStudentByIdCompatible(id);
+                    }
+                }
             }
 
-            res.json({ Status: "Success", Message: 'Student updated successfully', student: updatedStudent });
+            if (!updatedStudent) {
+                return res.status(404).json({
+                    Status: 'Fail',
+                    Error: 'Student not found'
+                });
+            }
+
+            return res.json({
+                Status: "Success",
+                Message: 'Student updated successfully',
+                student: updatedStudent
+            });
         } catch (err) {
-            console.error(err);
-            res.json({ message: 'Internal server error' });
+            console.error('updateStudent error:', err);
+            return res.status(500).json({
+                Status: 'Fail',
+                Error: 'Internal server error'
+            });
         }
     },
 

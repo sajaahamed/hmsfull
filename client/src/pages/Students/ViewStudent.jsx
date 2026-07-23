@@ -9,6 +9,8 @@ import { getUserInfoFromToken } from '../../utils/auth';
 const ViewStudent = () => {
     const { id } = useParams();
     const [stdData, setStdData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({});
     const [history, setHistory] = useState([]);
@@ -41,18 +43,47 @@ const ViewStudent = () => {
     }, [token]);
 
     useEffect(() => {
+        let active = true;
+        setLoading(true);
+        setLoadError('');
+
         axios.get(`${import.meta.env.VITE_APP_API}/student/get-student-byID/${id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
             .then(res => {
-                setStdData(res.data.Result);
-                setFormData(res.data.Result);
+                if (!active) return;
+
+                const student = res.data?.Result;
+                if (!student) {
+                    setStdData(null);
+                    setLoadError(res.data?.Error || 'Student not found.');
+                    return;
+                }
+
+                setStdData(student);
+                setFormData(student);
                 // Fetch history using the student's _id
-                if (res.data.Result?._id) {
-                    fetchHistory(res.data.Result._id);
+                if (student._id) {
+                    fetchHistory(student._id);
                 }
             })
-            .catch(err => console.log(err));
+            .catch(err => {
+                if (!active) return;
+                console.error('Failed to load student:', err);
+                setStdData(null);
+                setLoadError(
+                    err.response?.data?.Error
+                    || err.response?.data?.message
+                    || 'Failed to load student data.'
+                );
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
     }, [id, token, fetchHistory]);
 
     if (!isAuthorized) {
@@ -86,7 +117,21 @@ const ViewStudent = () => {
         }
     };
 
-    if (!stdData) return <div className="text-gray-500">Loading student data...</div>;
+    if (loading) return <div className="text-gray-500">Loading student data...</div>;
+
+    if (loadError || !stdData) {
+        return (
+            <div className="p-6 max-w-xl bg-white shadow-md rounded-lg mt-5">
+                <h1 className="text-xl font-bold text-[#6b0f14]">Unable to load student</h1>
+                <p className="mt-2 text-gray-600">{loadError || 'Student not found.'}</p>
+                <div className="mt-4">
+                    <Link to="/Dashboard/Students">
+                        <DefaultBtn type="button" label="Back to Students" />
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg mt-5">
