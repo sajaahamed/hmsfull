@@ -1,5 +1,41 @@
 const Role = require("../model/Role");
 const User = require("../model/User");
+const mongoose = require("mongoose");
+
+function getCompatibleUserIdFilter(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return null;
+
+    const candidates = [normalizedId];
+    if (mongoose.Types.ObjectId.isValid(normalizedId)) {
+        candidates.unshift(new mongoose.Types.ObjectId(normalizedId));
+    }
+
+    return {
+        _id: candidates.length === 1
+            ? candidates[0]
+            : { $in: candidates }
+    };
+}
+
+async function findUserByIdCompatible(id) {
+    const filter = getCompatibleUserIdFilter(id);
+    if (!filter) return null;
+
+    const user = await User.collection.findOne(
+        filter,
+        { projection: { password: 0 } }
+    );
+
+    if (!user) return null;
+
+    const roleIds = Array.isArray(user.roles) ? user.roles : [];
+    const roles = roleIds.length
+        ? await Role.collection.find({ _id: { $in: roleIds } }).toArray()
+        : [];
+
+    return { ...user, roles };
+}
 
 
 const UserController = {
@@ -29,14 +65,28 @@ const UserController = {
 
     getoneuser: async (req, res) => {
         try {
-            const { id } = req.params
+            const { id } = req.params;
+            const getoneuserdata = await findUserByIdCompatible(id);
 
-            const getoneuserdata = await User.findById(id).populate('roles');
+            if (!getoneuserdata) {
+                return res.status(404).json({
+                    Status: 'Fail',
+                    Error: 'User not found',
+                    Result: null
+                });
+            }
 
-            return res.json({ Result: getoneuserdata })
+            return res.json({
+                Status: 'Success',
+                Result: getoneuserdata
+            });
         }
         catch (err) {
-            console.log(err)
+            console.error('getoneuser error:', err);
+            return res.status(500).json({
+                Status: 'Fail',
+                Error: 'Failed to load user'
+            });
         }
     },
 

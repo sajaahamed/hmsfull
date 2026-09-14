@@ -177,7 +177,7 @@ const AllStudents = () => {
 
         return (
             <div className="w-32 relative mb-5" ref={rootRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Faculty</label>
                 <div className="">
                     <div
                         role="button"

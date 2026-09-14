@@ -10,18 +10,49 @@ const ViewUser = () => {
     const { id } = useParams()
     const token = localStorage.getItem('login')
     const loginemail = localStorage.getItem('loginE')
-    const [getoneuser, setgetoneuser] = useState({})
+    const [getoneuser, setgetoneuser] = useState(null)
+    const [loadingUser, setLoadingUser] = useState(true)
+    const [userError, setUserError] = useState('')
 
     useEffect(() => {
+        let active = true
+        setLoadingUser(true)
+        setUserError('')
+
         axios.get(import.meta.env.VITE_APP_API + '/user/view-one-user/' + id, {
             headers: {
                 'Authorization': `Bearer ${token}`,
             }
         })
             .then(res => {
-                setgetoneuser(res.data.Result);
+                if (!active) return
+
+                const user = res.data?.Result
+                if (!user) {
+                    setgetoneuser(null)
+                    setUserError(res.data?.Error || 'User not found.')
+                    return
+                }
+
+                setgetoneuser(user)
             })
-            .catch(err => console.log(err))
+            .catch(err => {
+                if (!active) return
+                console.error('Failed to load user:', err)
+                setgetoneuser(null)
+                setUserError(
+                    err.response?.data?.Error
+                    || err.response?.data?.message
+                    || 'Failed to load user.'
+                )
+            })
+            .finally(() => {
+                if (active) setLoadingUser(false)
+            })
+
+        return () => {
+            active = false
+        }
     }, [id, token])
 
 
@@ -114,6 +145,23 @@ const ViewUser = () => {
         }
     };
 
+    if (loadingUser) {
+        return <div className="p-6 text-gray-500">Loading user data...</div>
+    }
+
+    if (userError || !getoneuser) {
+        return (
+            <div className="p-6 max-w-xl bg-white shadow-md rounded-lg mt-5">
+                <h1 className="text-xl font-bold text-[#6b0f14]">Unable to load user</h1>
+                <p className="mt-2 text-gray-600">{userError || 'User not found.'}</p>
+                <div className="mt-4">
+                    <Link to="/Dashboard/Users">
+                        <DefaultBtn type="button" label="Back to Users" />
+                    </Link>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="bg-gray-100 py-10 px-4">
@@ -157,7 +205,7 @@ const ViewUser = () => {
                                     className="inline-block bg-[#fdf6e3] text-[#6b0f14] text-sm px-3 py-1 rounded-full shadow-sm"
                                 >
                                     <div className="flex flex-wrap gap-2">
-                                        {getoneuser.roles?.length > 0 ? (
+                                        {getoneuser?.roles?.length > 0 ? (
                                             getoneuser.roles.map((role, index) => (
                                                 <span
                                                     key={index}

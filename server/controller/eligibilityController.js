@@ -49,9 +49,15 @@ const EligibilityController = {
                 return res.status(400).json({ Error: 'studentIds array is required' });
             }
 
-            // Only allow un-marking students who are NOT already assigned
+            const activeAllocations = await Allocation.find({
+                studentId: { $in: studentIds },
+                active: true
+            }).select('studentId').lean();
+            const assignedStudentIds = activeAllocations.map(allocation => allocation.studentId);
+
+            // Only allow un-marking students who are not currently assigned.
             await Student.updateMany(
-                { _id: { $in: studentIds }, isAssign: false },
+                { _id: { $in: studentIds, $nin: assignedStudentIds } },
                 { $set: { eligibilityStatus: 'Not Eligible' } }
             );
 
@@ -66,14 +72,37 @@ const EligibilityController = {
     },
 
     // ─── Hostel Assignment Page ───
-    // Returns students where eligibilityStatus = 'Eligible' AND isAssign = false
+    // Returns eligible students with their current allocation state.
     getEligibleForAssignment: async (req, res) => {
         try {
             const students = await Student.find({
-                eligibilityStatus: { $in: ['Eligible', true] },
-                isAssign: false
+                eligibilityStatus: { $in: ['Eligible', 'Assigned', true] }
             }).lean();
-            return res.json({ Result: students });
+
+            const activeAllocations = await Allocation.find({
+                studentId: { $in: students.map(student => student._id) },
+                active: true
+            }).populate('hostelID', 'name hostelID').sort({ inDate: -1 }).lean();
+
+            const allocationByStudent = new Map();
+            for (const allocation of activeAllocations) {
+                const studentId = allocation.studentId?.toString();
+                if (studentId && !allocationByStudent.has(studentId)) {
+                    allocationByStudent.set(studentId, allocation);
+                }
+            }
+
+            const result = students.map(student => {
+                const allocation = allocationByStudent.get(student._id.toString());
+                return {
+                    ...student,
+                    assignmentStatus: allocation ? 'Assigned' : 'Not Assigned',
+                    currentHostel: allocation?.hostelID?.name || '-',
+                    activeAllocationId: allocation?._id || null,
+                };
+            });
+
+            return res.json({ Result: result });
         } catch (err) {
             console.error("Error in getEligibleForAssignment:", err);
             return res.status(500).json({ Error: "Internal server error" });

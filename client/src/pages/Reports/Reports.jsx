@@ -468,6 +468,7 @@ const Reports = () => {
                 title: paymentFilters.reportType === 'certified' ? 'Certified List' : 'Hall List',
                 headers, columns, headerRows, rows,
                 fileName: paymentFilters.reportType === 'certified' ? 'Certified_List' : 'Hall_List',
+                facultyName: deptFullName !== 'ALL' ? deptFullName : '',
             });
             setShowPaymentFilterModal(false);
             setShowPreviewModal(true);
@@ -881,6 +882,23 @@ const Reports = () => {
                     r.font = { name: 'Calibri', size: 11 };
                     r.getCell(1).alignment = { horizontal: 'left' };
                 }
+            }
+
+            // Cc. section — common for both normal and certified reports
+            worksheet.addRow([]);
+            worksheet.addRow([]);
+            const facultyLabel = data.facultyName ? `Dean/ Faculty of ${data.facultyName}` : 'Dean/ Faculty of .....................';
+            worksheet.addRow([`Cc.-    1. ${facultyLabel}`]);
+            worksheet.addRow(['           2. Chief Medical Officer']);
+            worksheet.addRow(['           3. Chief Marshal']);
+            worksheet.addRow(['           4. Chief Security Officer']);
+            worksheet.addRow(['           5. AB/ Student Service Account Branch']);
+
+            const ccStartRow = worksheet.rowCount - 4;
+            for (let i = ccStartRow; i <= worksheet.rowCount; i++) {
+                const r = worksheet.getRow(i);
+                r.font = { name: 'Calibri', size: 11 };
+                r.getCell(1).alignment = { horizontal: 'left' };
             }
         }
 
@@ -1311,6 +1329,16 @@ const Reports = () => {
                                             Date
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {previewData.reportId === 'payments' && (
+                                <div className="mt-14 text-sm leading-relaxed">
+                                    <div>Cc.-&nbsp;&nbsp;&nbsp;&nbsp;1. Dean/ Faculty of {previewData.facultyName || '.....................'}</div>
+                                    <div className="ml-12">2. Chief Medical Officer</div>
+                                    <div className="ml-12">3. Chief Marshal</div>
+                                    <div className="ml-12">4. Chief Security Officer</div>
+                                    <div className="ml-12">5. AB/ Student Service Account Branch</div>
                                 </div>
                             )}
                         </div>

@@ -408,7 +408,11 @@ const EligibleStudents = () => {
                             <th className="px-4 py-4 font-semibold whitespace-nowrap">Study Year</th>
                             <th className="px-4 py-4 font-semibold">Gender</th>
                             <th className="px-4 py-4 font-semibold whitespace-nowrap">Distance (KM)</th>
-                            <th className="px-4 py-4 font-semibold">Status</th>
+                            <th className="px-4 py-4 font-semibold">Eligibility Status</th>
+                            {activeTab === 'Eligible' && <>
+                                <th className="px-4 py-4 font-semibold whitespace-nowrap">Assignment Status</th>
+                                <th className="px-4 py-4 font-semibold whitespace-nowrap">Current Hostel</th>
+                            </>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -466,12 +470,22 @@ const EligibleStudents = () => {
                                                 </span>
                                             )}
                                         </td>
+                                        {activeTab === 'Eligible' && <>
+                                            <td className="px-4 py-4">
+                                                <span className={`text-xs font-bold px-2.5 py-1 rounded-md border whitespace-nowrap ${std.assignmentStatus === 'Assigned'
+                                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                                    : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                                                    {std.assignmentStatus || 'Not Assigned'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4 whitespace-nowrap">{std.currentHostel || '-'}</td>
+                                        </>}
                                     </tr>
                                 )
                             })
                         ) : (
                             <tr>
-                                <td colSpan="9" className="px-6 py-8 text-center text-gray-500 bg-gray-50">
+                                <td colSpan={activeTab === 'Eligible' ? 11 : 9} className="px-6 py-8 text-center text-gray-500 bg-gray-50">
                                     {activeTab === 'Not Eligible' ? 'No students found. All students may already be eligible.' : 'No eligible students waiting for assignment found.'}
                                 </td>
                             </tr>

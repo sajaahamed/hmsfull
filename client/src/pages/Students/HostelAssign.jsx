@@ -229,7 +229,7 @@ const HostelAssign = () => {
             headers: { Authorization: `Bearer ${token}` }
         })
             .then(res => {
-                const students = res.data.Result || []
+                const students = (res.data.Result || []).filter(student => student.assignmentStatus !== 'Assigned')
                 setgetallstudents(students)
                 setFilteredStudents(students)
             })
@@ -453,7 +453,7 @@ const HostelAssign = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 })
                     .then(res => {
-                        const students = res.data.Result || []
+                        const students = (res.data.Result || []).filter(student => student.assignmentStatus !== 'Assigned')
                         setgetallstudents(students)
                         setFilteredStudents(students)
                     })

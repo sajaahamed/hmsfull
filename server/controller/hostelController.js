@@ -160,21 +160,15 @@ const HostelController = {
         try {
             const getallhostel = await Hostel.find().populate('warden').lean();
 
-            const currentYear = new Date().getFullYear().toString();
             const allRooms = await Room.find({});
-            const allAllocations = await Allocation.find({ active: true, academicYear: currentYear });
 
-            const result = getallhostel.map(hostel => {
+            const result = await Promise.all(getallhostel.map(async hostel => {
                 const hostelRooms = allRooms.filter(r => r.hostelID?.toString() === hostel._id.toString());
                 const totalCapacity = hostelRooms.reduce((sum, room) => sum + (room.capasity || 4), 0);
-
-                const hostelAllocations = allAllocations.filter(a => a.hostelID?.toString() === hostel._id.toString());
-                const uniqueStudents = new Set(hostelAllocations.map(a => {
-                    if (a.studentId) return a.studentId.toString();
-                    if (a.regNo) return a.regNo.toString().toLowerCase();
-                    return null;
-                }).filter(Boolean));
-                const assignedStudents = uniqueStudents.size;
+                const assignedStudents = await Allocation.countDocuments({
+                    hostelID: hostel._id,
+                    active: true
+                });
 
                 return {
                     ...hostel,
@@ -184,7 +178,7 @@ const HostelController = {
                     isFull: assignedStudents >= totalCapacity,
                     occupancyPercentage: totalCapacity > 0 ? Math.min((assignedStudents / totalCapacity) * 100, 100).toFixed(1) : 0
                 };
-            });
+            }));
 
             return res.json({ Result: result });
         }
@@ -338,13 +332,12 @@ const HostelController = {
             // Fetch students before proceeding
             const students = await Student.find({ _id: { $in: studentIds } });
 
-            // Check eligibility: students must have eligibilityStatus='Eligible' (or true for legacy) and isAssign=false
-            const ineligibleStudent = students.find(s => (s.eligibilityStatus !== 'Eligible' && s.eligibilityStatus !== true) || s.isAssign);
+            // Eligibility is stored on Student; current assignment is determined by active allocations.
+            const ineligibleStudent = students.find(s => s.eligibilityStatus !== 'Eligible' && s.eligibilityStatus !== 'Assigned' && s.eligibilityStatus !== true);
             if (ineligibleStudent) {
-                const reason = ineligibleStudent.isAssign ? 'already assigned' : 'not eligible';
                 return res.json({
                     Status: "Error",
-                    Message: `Student ${ineligibleStudent.name || ineligibleStudent.enrolmentNo || 'Unknown'} is ${reason} for hostel assignment.`
+                    Message: `Student ${ineligibleStudent.name || ineligibleStudent.enrolmentNo || 'Unknown'} is not eligible for hostel assignment.`
                 });
             }
 
@@ -364,10 +357,16 @@ const HostelController = {
             const rooms = await Room.find({ hostelID: hostelId });
             const totalCapacity = rooms.reduce((sum, room) => sum + (room.capasity || 4), 0);
 
+            const currentAllocations = await Allocation.find({
+                studentId: { $in: studentIds },
+                active: true
+            });
+            const currentAllocationIds = currentAllocations.map(allocation => allocation._id);
+
             const existingAllocations = await Allocation.find({
                 hostelID: hostelId,
-                academicYear: new Date().getFullYear().toString(),
-                active: true
+                active: true,
+                _id: { $nin: currentAllocationIds }
             });
             const uniqueExistingStudents = new Set(existingAllocations.map(a => {
                 if (a.studentId) return a.studentId.toString();
@@ -376,14 +375,22 @@ const HostelController = {
             }).filter(Boolean));
             const existingAllocationsCount = uniqueExistingStudents.size;
 
-            const newAllocationsCount = studentIds.length;
+            const uniqueStudentIds = [...new Set(studentIds.map(studentId => studentId.toString()))];
+            const newAllocationsCount = uniqueStudentIds.length;
 
             if (existingAllocationsCount + newAllocationsCount > totalCapacity) {
                 return res.json({ Status: "Error", Message: "Hostel Capacity Exceeded" });
             }
 
-            // Create allocations
-            const allocations = studentIds.map(studentId => ({
+            // Retain allocation history while ensuring one active allocation per student.
+            if (currentAllocationIds.length > 0) {
+                await Allocation.updateMany(
+                    { _id: { $in: currentAllocationIds } },
+                    { $set: { active: false, outDate: new Date(), note: 'Reassigned to another hostel' } }
+                );
+            }
+
+            const allocations = uniqueStudentIds.map(studentId => ({
                 regNo: studentId,
                 studentId: studentId,
                 hostelID: hostelId,
