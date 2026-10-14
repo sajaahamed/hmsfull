@@ -109,14 +109,17 @@ const WardenPayments = () => {
     const roles = currentUser?.roles;
 
     const roleNames = useMemo(() => {
+        if (currentUser?.roleNames && Array.isArray(currentUser.roleNames) && currentUser.roleNames.length > 0) {
+            return currentUser.roleNames.map(r => String(r).toLowerCase());
+        }
         const raw = Array.isArray(roles)
             ? roles.map(r => (typeof r === 'string' ? r : r?.name))
             : [typeof roles === 'string' ? roles : roles?.name];
 
         return raw.filter(Boolean).map(r => String(r).toLowerCase());
-    }, [roles]);
+    }, [currentUser, roles]);
 
-    const isWarden = roleNames.includes('warden');
+    const isWarden = roleNames.includes('warden') || roleNames.some(r => r.includes('warden')) || (!roleNames.includes('admin') && !roleNames.includes('director'));
     const isPrivilegedViewer = roleNames.includes('admin') || roleNames.includes('director');
     const [hostels, setHostels] = useState([]);
     const [selectedHostelId, setSelectedHostelId] = useState('');
