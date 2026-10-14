@@ -109,17 +109,14 @@ const WardenPayments = () => {
     const roles = currentUser?.roles;
 
     const roleNames = useMemo(() => {
-        if (currentUser?.roleNames && Array.isArray(currentUser.roleNames) && currentUser.roleNames.length > 0) {
-            return currentUser.roleNames.map(r => String(r).toLowerCase());
-        }
         const raw = Array.isArray(roles)
             ? roles.map(r => (typeof r === 'string' ? r : r?.name))
             : [typeof roles === 'string' ? roles : roles?.name];
 
         return raw.filter(Boolean).map(r => String(r).toLowerCase());
-    }, [currentUser, roles]);
+    }, [roles]);
 
-    const isWarden = roleNames.includes('warden') || roleNames.some(r => r.includes('warden')) || (!roleNames.includes('admin') && !roleNames.includes('director'));
+    const isWarden = roleNames.includes('warden');
     const isPrivilegedViewer = roleNames.includes('admin') || roleNames.includes('director');
     const [hostels, setHostels] = useState([]);
     const [selectedHostelId, setSelectedHostelId] = useState('');
@@ -581,9 +578,11 @@ const WardenPayments = () => {
     return (
         <>
             <div className={`mt-8 relative ${showPreviewModal ? 'print:hidden' : ''}`}>
-                <div className="mb-4 font-bold text-gray-800 text-2xl tracking-tight">Manage Payments</div>
+                <div className="mb-4 font-semibold text-gray-700 text-2xl">Manage Payments</div>
                 {error && <div className="mb-4 p-4 text-red-600 bg-red-50 rounded-lg border border-red-100">{error}</div>}
                 {successMsg && <div className="mb-4 p-4 text-green-600 bg-green-50 rounded-lg border border-green-100">{successMsg}</div>}
+
+
 
                 {isPrivilegedViewer && (
                     <div className="mb-4 flex items-center gap-3">
@@ -598,52 +597,42 @@ const WardenPayments = () => {
                 )}
 
                 {(isWarden || isPrivilegedViewer) && (
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                         {isWarden && (
-                            <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-gray-200/90 shadow-xs">
-                                <span className="font-semibold text-xs text-gray-800">Default Payment Date:</span>
+                            <div className="flex items-center gap-2 text-sm text-gray-700 bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-sm">
+                                <span className="font-semibold text-xs text-[#6b0f14]">Default Payment Date:</span>
                                 <input
                                     type="date"
                                     value={defaultPaymentDate}
-                                    onClick={(e) => {
-                                        try {
-                                            if (typeof e.target.showPicker === 'function') {
-                                                e.target.showPicker();
-                                            }
-                                        } catch (_) { }
-                                    }}
                                     onChange={(e) => setDefaultPaymentDate(e.target.value)}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-400 text-gray-700 font-medium transition-colors shadow-2xs"
+                                    className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 focus:border-[#6b0f14] bg-white cursor-pointer shadow-sm text-gray-700 font-medium"
                                 />
                             </div>
                         )}
-                        <button
-                            onClick={() => setShowFilterModal(true)}
-                            className="px-5 py-2.5 bg-[#601418] text-white rounded-xl hover:bg-[#480d10] active:scale-95 shadow-xs ml-auto text-sm font-semibold transition-all"
-                        >
+                        <button onClick={() => setShowFilterModal(true)} className="px-4 py-2 bg-[#6b0f14] text-white rounded-lg hover:bg-[#4f0a0f] shadow-sm ml-auto text-sm font-medium">
                             Preview Report
                         </button>
                     </div>
                 )}
 
-                <div className="overflow-x-auto rounded-2xl shadow-sm border border-gray-100 bg-white">
+                <div className="overflow-x-auto rounded-2xl shadow-lg bg-white">
                     <table className="min-w-full text-sm text-left text-gray-600">
-                        <thead className="text-xs uppercase bg-[#faedd0] text-[#70221e] font-bold tracking-wider">
+                        <thead className="text-xs uppercase bg-[#fdf6e3] text-[#6b0f14]">
                             <tr>
-                                <th className="px-6 py-4">NO</th>
-                                <th className="px-6 py-4">ENROLLMENT NO</th>
-                                <th className="px-6 py-4">HOSTEL</th>
-                                <th className="px-6 py-4">ROOM NO</th>
-                                <th className="px-6 py-4">HALL FEE</th>
-                                <th className="px-6 py-4">STATUS</th>
-                                <th className="px-6 py-4">DATE</th>
-                                {isWarden && <th className="px-6 py-4">ACTIONS</th>}
+                                <th className="px-6 py-3">No</th>
+                                <th className="px-6 py-3">Enrollment No</th>
+                                <th className="px-6 py-3">Hostel</th>
+                                <th className="px-6 py-3">Room No</th>
+                                <th className="px-6 py-3">Hall Fee</th>
+                                <th className="px-6 py-3">Status</th>
+                                <th className="px-6 py-3">Date</th>
+                                {isWarden && <th className="px-6 py-3">Actions</th>}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100/90 bg-white">
+                        <tbody className="divide-y divide-gray-100">
                             {payments.length === 0 ? (
                                 <tr>
-                                    <td colSpan="9" className="px-6 py-6 text-center text-gray-500">
+                                    <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
                                         No payment records found
                                     </td>
                                 </tr>
@@ -651,68 +640,64 @@ const WardenPayments = () => {
                                 payments.map((p, idx) => {
                                     const isPaid = p.paymentStatus === 'Paid';
                                     const sId = p.studentId?._id;
-                                    const rowDate = customDates[sId] !== undefined
-                                        ? customDates[sId]
-                                        : (p.paidDate ? formatDateOnly(p.paidDate) : defaultPaymentDate);
-                                    const rowFee = customFees[sId] !== undefined
-                                        ? customFees[sId]
-                                        : (p.amount && Number(p.amount) > 0 ? p.amount : 1500);
-
-                                    const hasFeeChanged = customFees[sId] !== undefined && Number(customFees[sId]) !== Number(p.amount);
-                                    const hasDateChanged = customDates[sId] !== undefined && customDates[sId] !== formatDateOnly(p.paidDate);
 
                                     return (
-                                        <tr key={p._id || idx} className="hover:bg-[#fffdf7] transition-colors">
-                                            <td className="px-6 py-4 text-gray-500 font-normal text-sm">{idx + 1}</td>
-                                            <td className="px-6 py-4 font-medium text-gray-700 text-sm">{p.studentId?.enrolmentNo || '-'}</td>
-                                            <td className="px-6 py-4 text-gray-600 text-sm">{p.hostelName || '-'}</td>
-                                            <td className="px-6 py-4 text-gray-600 text-sm">{p.roomNo || '-'}</td>
+                                        <tr key={p._id || idx} className="hover:bg-[#fefaf0]">
+                                            <td className="px-6 py-4">{idx + 1}</td>
+                                            <td className="px-6 py-4 font-medium">{p.studentId?.enrolmentNo || '-'}</td>
+                                            <td className="px-6 py-4">{p.hostelName || '-'}</td>
+                                            <td className="px-6 py-4">{p.roomNo || '-'}</td>
                                             <td className="px-6 py-4">
                                                 {isWarden ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-400 font-semibold tracking-wide">LKR</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs text-gray-400 font-medium">LKR</span>
                                                         <input
                                                             type="number"
                                                             min="0"
-                                                            className="w-28 px-3 py-1.5 text-sm text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white hover:border-gray-300 transition-colors shadow-2xs"
+                                                            className="w-24 px-2 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 focus:border-[#6b0f14] bg-white font-medium shadow-sm"
                                                             placeholder="1500"
-                                                            value={rowFee}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    if (isPaid) handleUpdatePayment(sId);
-                                                                    else handleMarkAsPaid(sId);
-                                                                }
-                                                            }}
+                                                            value={
+                                                                customFees[sId] !== undefined
+                                                                    ? customFees[sId]
+                                                                    : (p.amount && Number(p.amount) > 0 ? p.amount : 1500)
+                                                            }
                                                             onChange={(e) => setCustomFees(prev => ({ ...prev, [sId]: e.target.value }))}
                                                         />
                                                     </div>
                                                 ) : (
-                                                    <span className="text-gray-700 font-medium">LKR {p.amount || 0}</span>
+                                                    `LKR ${p.amount}`
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span
-                                                    className={`inline-flex items-center justify-center px-4 py-1 text-xs font-semibold rounded-full ${isPaid
-                                                        ? 'bg-[#dcfce7] text-[#166534]'
-                                                        : 'bg-[#fee2e2] text-[#8e1d23]'
-                                                        }`}
-                                                >
-                                                    {isPaid ? 'Paid' : 'Pending'}
-                                                </span>
+                                                {isWarden ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => isPaid ? handleUndo(sId) : handleMarkAsPaid(sId)}
+                                                        disabled={processingId === sId}
+                                                        className={`px-3 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer shadow-xs ${isPaid
+                                                                ? 'bg-green-100 text-green-800 border border-green-200 hover:bg-green-200'
+                                                                : 'bg-red-100 text-red-800 border border-red-200 hover:bg-red-200'
+                                                            }`}
+                                                        title={isPaid ? "Click to Undo (revert to Pending)" : "Click to Mark as Paid"}
+                                                    >
+                                                        {isPaid ? 'Paid' : 'Pending'}
+                                                    </button>
+                                                ) : (
+                                                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${isPaid ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+                                                        {isPaid ? 'Paid' : 'Pending'}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {isWarden ? (
                                                     <input
                                                         type="date"
-                                                        className="w-36 px-3 py-1.5 text-xs text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-300 transition-colors shadow-2xs"
-                                                        value={rowDate}
-                                                        onClick={(e) => {
-                                                            try {
-                                                                if (typeof e.target.showPicker === 'function') {
-                                                                    e.target.showPicker();
-                                                                }
-                                                            } catch (_) { }
-                                                        }}
+                                                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b0f14]/30 focus:border-[#6b0f14] bg-white cursor-pointer hover:border-[#6b0f14] shadow-sm text-gray-700 font-medium"
+                                                        value={
+                                                            customDates[sId] !== undefined
+                                                                ? customDates[sId]
+                                                                : (p.paidDate ? formatDateOnly(p.paidDate) : defaultPaymentDate)
+                                                        }
                                                         onChange={(e) => {
                                                             const newDate = e.target.value;
                                                             setCustomDates(prev => ({ ...prev, [sId]: newDate }));
@@ -728,40 +713,28 @@ const WardenPayments = () => {
                                                         <button
                                                             onClick={() => handleMarkAsPaid(sId)}
                                                             disabled={processingId === sId}
-                                                            className={`px-4 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-sm active:scale-95
-                                                        ${processingId === sId ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#601418] hover:bg-[#480d10]'}`}
+                                                            className={`px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg transition-all shadow-sm
+                                                        ${processingId === sId ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#6b0f14] hover:bg-[#4f0a0f] active:scale-95'}`}
                                                         >
                                                             {processingId === sId ? 'Processing...' : 'Mark as Paid'}
                                                         </button>
                                                     ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            {(hasFeeChanged || hasDateChanged) && (
-                                                                <button
-                                                                    onClick={() => handleUpdatePayment(sId)}
-                                                                    disabled={processingId === sId}
-                                                                    className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#601418] hover:bg-[#480d10] rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                                                                    title="Save updated fee/date"
-                                                                >
-                                                                    {processingId === sId ? 'Saving...' : 'Update'}
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => handleUndo(sId)}
-                                                                disabled={processingId === sId}
-                                                                className="px-3.5 py-1.5 text-xs font-medium text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all shadow-2xs active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
-                                                                title="Undo payment (revert to Pending)"
-                                                            >
-                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                </svg>
-                                                                {processingId === sId ? 'Undoing...' : 'Undo'}
-                                                            </button>
-                                                        </div>
+                                                        <button
+                                                            onClick={() => handleUndo(sId)}
+                                                            disabled={processingId === sId}
+                                                            className="px-3.5 py-1.5 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                                                            title="Undo payment (revert to Pending)"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                            </svg>
+                                                            {processingId === sId ? 'Undoing...' : 'Undo'}
+                                                        </button>
                                                     )}
                                                 </td>
                                             )}
                                         </tr>
-                                    );
+                                    )
                                 })
                             )}
                         </tbody>
