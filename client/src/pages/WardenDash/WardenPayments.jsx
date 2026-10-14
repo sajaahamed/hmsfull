@@ -597,34 +597,30 @@ const WardenPayments = () => {
                     </div>
                 )}
 
-                {(isWarden || isPrivilegedViewer) && (
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-                        {isWarden && (
-                            <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-gray-200/90 shadow-xs">
-                                <span className="font-semibold text-xs text-gray-800">Default Payment Date:</span>
-                                <input
-                                    type="date"
-                                    value={defaultPaymentDate}
-                                    onClick={(e) => {
-                                        try {
-                                            if (typeof e.target.showPicker === 'function') {
-                                                e.target.showPicker();
-                                            }
-                                        } catch (_) { }
-                                    }}
-                                    onChange={(e) => setDefaultPaymentDate(e.target.value)}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-400 text-gray-700 font-medium transition-colors shadow-2xs"
-                                />
-                            </div>
-                        )}
-                        <button
-                            onClick={() => setShowFilterModal(true)}
-                            className="px-5 py-2.5 bg-[#601418] text-white rounded-xl hover:bg-[#480d10] active:scale-95 shadow-xs ml-auto text-sm font-semibold transition-all"
-                        >
-                            Preview Report
-                        </button>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-gray-200/90 shadow-xs">
+                        <span className="font-semibold text-xs text-gray-800">Default Payment Date:</span>
+                        <input
+                            type="date"
+                            value={defaultPaymentDate}
+                            onClick={(e) => {
+                                try {
+                                    if (typeof e.target.showPicker === 'function') {
+                                        e.target.showPicker();
+                                    }
+                                } catch (_) { }
+                            }}
+                            onChange={(e) => setDefaultPaymentDate(e.target.value)}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-400 text-gray-700 font-medium transition-colors shadow-2xs"
+                        />
                     </div>
-                )}
+                    <button
+                        onClick={() => setShowFilterModal(true)}
+                        className="px-5 py-2.5 bg-[#601418] text-white rounded-xl hover:bg-[#480d10] active:scale-95 shadow-xs ml-auto text-sm font-semibold transition-all"
+                    >
+                        Preview Report
+                    </button>
+                </div>
 
                 <div className="overflow-x-auto rounded-2xl shadow-sm border border-gray-100 bg-white">
                     <table className="min-w-full text-sm text-left text-gray-600">
@@ -637,13 +633,13 @@ const WardenPayments = () => {
                                 <th className="px-6 py-4">HALL FEE</th>
                                 <th className="px-6 py-4">STATUS</th>
                                 <th className="px-6 py-4">DATE</th>
-                                {isWarden && <th className="px-6 py-4">ACTIONS</th>}
+                                <th className="px-6 py-4">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100/90 bg-white">
                             {payments.length === 0 ? (
                                 <tr>
-                                    <td colSpan="9" className="px-6 py-6 text-center text-gray-500">
+                                    <td colSpan="8" className="px-6 py-6 text-center text-gray-500">
                                         No payment records found
                                     </td>
                                 </tr>
@@ -668,27 +664,23 @@ const WardenPayments = () => {
                                             <td className="px-6 py-4 text-gray-600 text-sm">{p.hostelName || '-'}</td>
                                             <td className="px-6 py-4 text-gray-600 text-sm">{p.roomNo || '-'}</td>
                                             <td className="px-6 py-4">
-                                                {isWarden ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-400 font-semibold tracking-wide">LKR</span>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            className="w-28 px-3 py-1.5 text-sm text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white hover:border-gray-300 transition-colors shadow-2xs"
-                                                            placeholder="1500"
-                                                            value={rowFee}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    if (isPaid) handleUpdatePayment(sId);
-                                                                    else handleMarkAsPaid(sId);
-                                                                }
-                                                            }}
-                                                            onChange={(e) => setCustomFees(prev => ({ ...prev, [sId]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-700 font-medium">LKR {p.amount || 0}</span>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-400 font-semibold tracking-wide">LKR</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        className="w-28 px-3 py-1.5 text-sm text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white hover:border-gray-300 transition-colors shadow-2xs"
+                                                        placeholder="1500"
+                                                        value={rowFee}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                if (isPaid) handleUpdatePayment(sId);
+                                                                else handleMarkAsPaid(sId);
+                                                            }
+                                                        }}
+                                                        onChange={(e) => setCustomFees(prev => ({ ...prev, [sId]: e.target.value }))}
+                                                    />
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span
@@ -701,65 +693,59 @@ const WardenPayments = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {isWarden ? (
-                                                    <input
-                                                        type="date"
-                                                        className="w-36 px-3 py-1.5 text-xs text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-300 transition-colors shadow-2xs"
-                                                        value={rowDate}
-                                                        onClick={(e) => {
-                                                            try {
-                                                                if (typeof e.target.showPicker === 'function') {
-                                                                    e.target.showPicker();
-                                                                }
-                                                            } catch (_) { }
-                                                        }}
-                                                        onChange={(e) => {
-                                                            const newDate = e.target.value;
-                                                            setCustomDates(prev => ({ ...prev, [sId]: newDate }));
-                                                        }}
-                                                    />
+                                                <input
+                                                    type="date"
+                                                    className="w-36 px-3 py-1.5 text-xs text-gray-700 font-normal border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#601418] focus:border-[#601418] bg-white cursor-pointer hover:border-gray-300 transition-colors shadow-2xs"
+                                                    value={rowDate}
+                                                    onClick={(e) => {
+                                                        try {
+                                                            if (typeof e.target.showPicker === 'function') {
+                                                                e.target.showPicker();
+                                                            }
+                                                        } catch (_) { }
+                                                    }}
+                                                    onChange={(e) => {
+                                                        const newDate = e.target.value;
+                                                        setCustomDates(prev => ({ ...prev, [sId]: newDate }));
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {!isPaid ? (
+                                                    <button
+                                                        onClick={() => handleMarkAsPaid(sId)}
+                                                        disabled={processingId === sId}
+                                                        className={`px-4 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-sm active:scale-95
+                                                    ${processingId === sId ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#601418] hover:bg-[#480d10]'}`}
+                                                    >
+                                                        {processingId === sId ? 'Processing...' : 'Mark as Paid'}
+                                                    </button>
                                                 ) : (
-                                                    <span className="text-gray-700 font-medium">{formatDateOnly(p.paidDate)}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        {(hasFeeChanged || hasDateChanged) && (
+                                                            <button
+                                                                onClick={() => handleUpdatePayment(sId)}
+                                                                disabled={processingId === sId}
+                                                                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#601418] hover:bg-[#480d10] rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                                                title="Save updated fee/date"
+                                                            >
+                                                                {processingId === sId ? 'Saving...' : 'Update'}
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleUndo(sId)}
+                                                            disabled={processingId === sId}
+                                                            className="px-3.5 py-1.5 text-xs font-medium text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all shadow-2xs active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                                                            title="Undo payment (revert to Pending)"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                            </svg>
+                                                            {processingId === sId ? 'Undoing...' : 'Undo'}
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </td>
-                                            {isWarden && (
-                                                <td className="px-6 py-4">
-                                                    {!isPaid ? (
-                                                        <button
-                                                            onClick={() => handleMarkAsPaid(sId)}
-                                                            disabled={processingId === sId}
-                                                            className={`px-4 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-sm active:scale-95
-                                                        ${processingId === sId ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#601418] hover:bg-[#480d10]'}`}
-                                                        >
-                                                            {processingId === sId ? 'Processing...' : 'Mark as Paid'}
-                                                        </button>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            {(hasFeeChanged || hasDateChanged) && (
-                                                                <button
-                                                                    onClick={() => handleUpdatePayment(sId)}
-                                                                    disabled={processingId === sId}
-                                                                    className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#601418] hover:bg-[#480d10] rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                                                                    title="Save updated fee/date"
-                                                                >
-                                                                    {processingId === sId ? 'Saving...' : 'Update'}
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => handleUndo(sId)}
-                                                                disabled={processingId === sId}
-                                                                className="px-3.5 py-1.5 text-xs font-medium text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all shadow-2xs active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
-                                                                title="Undo payment (revert to Pending)"
-                                                            >
-                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                                </svg>
-                                                                {processingId === sId ? 'Undoing...' : 'Undo'}
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            )}
                                         </tr>
                                     );
                                 })
