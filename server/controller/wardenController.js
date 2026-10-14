@@ -781,7 +781,12 @@ const WardenController = {
 
             const assignments = await getActiveWardenAssignments(userId);
             const hostelIds = getActiveWardenHostelIds(assignments);
-            if (!hostelIds.length) return res.status(403).json({ Error: 'Warden record not found' });
+
+            const user = await User.findById(userId).populate('roles');
+            const roleValues = (user?.roles || []).map(r => typeof r === 'string' ? r : r?.name || '');
+            const isPrivileged = roleValues.some(r => ['admin', 'director'].includes(String(r).toLowerCase()));
+
+            if (!hostelIds.length && !isPrivileged) return res.status(403).json({ Error: 'Warden record not found' });
 
             const allocation = await Allocation.findOne({
                 $or: [
@@ -793,7 +798,7 @@ const WardenController = {
 
             if (!allocation) return res.status(404).json({ Error: 'Allocation not found for student' });
 
-            if (!allocation.hostelID || !hostelIds.includes(allocation.hostelID.toString())) {
+            if (!isPrivileged && (!allocation.hostelID || !hostelIds.includes(allocation.hostelID.toString()))) {
                 return res.status(403).json({ Error: 'Student is not in your hostel' });
             }
 
