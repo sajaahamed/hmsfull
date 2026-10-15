@@ -90,7 +90,7 @@ const WardenStudents = () => {
     return (
         <div className="mt-8">
             <div className="mb-4 font-semibold text-gray-700">
-                Logged in: {currentUser?.email || 'Unknown Warden'}
+                Logged in as: {currentUser?.email || 'Unknown Warden'}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 my-6">
